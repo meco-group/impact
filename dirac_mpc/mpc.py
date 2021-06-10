@@ -238,28 +238,33 @@ class MPC(Ocp):
             return 1;
           }}
 
-          double x[4] = {{1,2,3,4}};
-          //set(m, "x_current", x);
-          set_repeat(m->x_initial_guess, x);
-
-          get(m, "x_current", x);
-
-          printf("x_current %f %f %f %f\\n", x[0], x[1], x[2], x[3]);
-
-          double t = 42;
-          set_by_id(m, "x_current", "scara.jointR_vel", &t );
+          double t[2] = {{42, 43}};
           
-          get(m, "x_current", x);
-
-          printf("x_current %f %f %f %f\\n", x[0], x[1], x[2], x[3]);
-
-
+          set(m, "x_initial_guess", "scara.joint_vel", MPC_EVERYWHERE, t, MPC_HREP);
+          print_problem(m);
+          t[0] = 3;t[1] = 7;
+          set(m, "x_initial_guess", "scara.joint_vel", 2, t, MPC_HREP);
           print_problem(m);
 
+          double t4[4] = {{0.1, 0.2, 0.3, 0.4}};
 
-          //solve(m);
+          set(m, "x_initial_guess", MPC_ALL, 3, t4, MPC_HREP);
+          print_problem(m);
 
+          double t44[44];
+          for (int i=0;i<44;++i) {{
+            t44[i] = i;
+          }}
+          set(m, "x_initial_guess", MPC_ALL, MPC_EVERYWHERE, t44, MPC_FULL);
+          print_problem(m);
 
+          set(m, "x_initial_guess", MPC_ALL, MPC_EVERYWHERE, t44, MPC_FULL | MPC_ROW_MAJOR);
+          print_problem(m);
+
+          set(m, "x_initial_guess", "scara.joint_vel", MPC_EVERYWHERE, t44, MPC_FULL | MPC_ROW_MAJOR);
+          print_problem(m);
+
+          solve(m);
 
           destroy(m);
         }}
@@ -270,6 +275,15 @@ class MPC(Ocp):
       out.write(f"""
           #define casadi_real double
           #define casadi_int long long int
+
+          #define MPC_ALL 0
+          #define MPC_EVERYWHERE -1
+          #define MPC_FULL 0
+          #define MPC_HREP 1
+          #define MPC_VREP 2
+          #define MPC_COLUMN_MAJOR 0
+          #define MPC_ROW_MAJOR 4
+
 
           typedef struct MPC_pool {{
             casadi_int n;
@@ -334,13 +348,9 @@ class MPC(Ocp):
           /*
           *   
           */
-          int {prefix}set_by_id(MPCstruct* m, const char* var_name, const char* id, const casadi_real* value);
-          int {prefix}set(MPCstruct* m, const char* var_name, const casadi_real* value);
+
           int {prefix}get(MPCstruct* m, const char* var_name, casadi_real* value);
-
-          int {prefix}set_repeat(const MPCpool* p, const casadi_real* value);
-          int {prefix}set_slice(const MPCpool* p, casadi_int i, const casadi_real* value);
-
+          int {prefix}set(MPCstruct* m, const char* pool_name, const char* id, int stage, const double* src, int src_flags);
 
 
           int {prefix}print_problem(MPCstruct* m);
@@ -360,18 +370,7 @@ class MPC(Ocp):
     np = vvcat(parameters).numel()
 
 
-    """
-    
-    set_trajectory_by_id("joint1", m->x, value)
-    set_repeat_by_id("joint1", m->x, value)
-    set_slice_by_id("joint1", m->x, i, value)
 
-    set_trajectory(m->x, value)
-    set_repeat(m->x, value)
-    set() # like repeat but trajectory_length = 1
-    set_slice(m->x, i, value)
-
-    """
     p_names = ['"'+p.name()+'"' for p in self.parameters['']+self.parameters['control']]
     x_names = ['"'+x.name()+'"' for x in self.states]
     u_names = ['"'+u.name()+'"' for u in self.controls]
@@ -635,46 +634,59 @@ class MPC(Ocp):
             }}
           }}
 
-          int {prefix}set_by_id(MPCstruct* m, const char* var_name, const char* id, const casadi_real* value) {{
-            int i;
+          // return number of read src
+          int {prefix}set(MPCstruct* m, const char* pool, const char* id, int stage, const double* src, int src_flags) {{
+            int i, j, k, index, i_start, i_stop, k_start, k_stop, offset, row, col, stride;
             casadi_real* dst;
             const MPCpool* p;
-            p = {prefix}get_pool_by_name(m, var_name);
-            if (!p) {{
-              m->fatal(m, "set_by_id (ret code 1)", "Failed to find appropriate pool. \\n", id, var_name);
+            if (!pool) {{
+              m->fatal(m, "set (ret code 1)", "You may not pass a null pointer as pool. \\n");
               return 1;
             }}
-            for (i=0;i<p->n;++i) {{
-              if (!strcmp(id, p->names[i])) break;
-            }}
-            if (i==p->n) {{
-              m->fatal(m, "set_by_id (ret code 2)", "Id '%s' not found for pool '%s'. Use one of these options: \\n", id, var_name);
-              for (i=0;i<p->n;++i) {{
-                m->fatal(m, 0, " - %s\\n", p->names[i]);
-              }}
+            p = {prefix}get_pool_by_name(m, pool);
+            if (!p) {{
+              m->fatal(m, "set_by_id (ret code 2)", "Failed to find a pool named '%s'. \\n", pool);
               return 2;
             }}
-            if (p->stride==-1) {{
-              memcpy(p->data+p->part_offset[i], value, (p->part_offset[i+1]-p->part_offset[i])*sizeof(casadi_real));              
-            }} else {{
-              for (dst=p->data+p->part_offset[i];dst<p->data+p->size;dst+=p->stride) {{
-                memcpy(dst, value, p->part_unit[i]*sizeof(casadi_real));
-                value += p->part_unit[i];
+
+            // Determine index
+            index = -1;
+            if (id!=MPC_ALL) {{
+              for (i=0;i<p->n;++i) {{
+                if (!strcmp(id, p->names[i])) break;
+              }}
+              if (i==p->n) {{
+                m->fatal(m, "set_by_id (ret code 3)", "Id '%s' not found for pool '%s'. Use one of these options: \\n", id, pool);
+                for (i=0;i<p->n;++i) {{
+                  m->fatal(m, 0, " - %s\\n", p->names[i]);
+                }}
+                return 3;
+              }}
+              index = i;
+            }}
+
+            i_start = index==-1? 0 : index;
+            i_stop  = index==-1? p->n : index+1;
+            k_start = stage==MPC_EVERYWHERE? 0 : stage;
+            offset = 0;
+            for (i=i_start;i<i_stop;++i) {{
+              row = id==MPC_ALL ? p->part_offset[i] : 0;
+              if (src_flags & MPC_ROW_MAJOR) {{
+                stride = p->trajectory_length[i];
+              }} else {{
+                stride = id==MPC_ALL ? p->part_stride[i] : p->part_unit[i];
+              }}
+              for (j=0;j<p->part_unit[i];++j) {{
+                k_stop  = stage==MPC_EVERYWHERE? p->trajectory_length[i] : stage+1;
+                for (k=k_start;k<k_stop;++k) {{
+                  col = src_flags & MPC_HREP ? 0 : k;
+                  p->data[j+ p->part_offset[i] + p->part_stride[i]*k] = src_flags & MPC_ROW_MAJOR ? src[stride*row + col] : src[row + stride*col];
+                }}
+                row++;
               }}
             }}
 
             return 0;
-          }}
-
-
-          int {prefix}set_pool(const MPCpool* p, const casadi_real* value) {{
-            if (!value) return 1;
-            memcpy(p->data, value, p->size*sizeof(casadi_real));
-            return 0;
-          }}
-
-          int {prefix}set(MPCstruct* m, const char* var_name, const casadi_real* value) {{
-            return {prefix}set_pool({prefix}get_pool_by_name(m, var_name), value);
           }}
 
           int {prefix}get_pool(const MPCpool* p, casadi_real* value) {{
@@ -687,35 +699,9 @@ class MPC(Ocp):
             return {prefix}get_pool({prefix}get_pool_by_name(m, var_name), value);
           }}
 
-          int {prefix}set_repeat(const MPCpool* p, const casadi_real* value) {{
-            int i;
-            casadi_real* dst;
-            if (p->n==0) return 0;
-            if (p->stride==-1) return 1;
-            for (dst=p->data;dst<p->data+p->size;dst+=p->stride) {{
-              memcpy(dst, value, p->stride*sizeof(casadi_real));
-            }}
-          }}
-
-          int {prefix}set_slice(const MPCpool* p, casadi_int i, const casadi_real* value) {{
-            if (p->n) return 0;
-            if (p->stride==-1 || i<0 || i>=p->trajectory_length[0]) return 1;
-            memcpy(p->data+i*p->stride, value, p->stride*sizeof(casadi_real));
-          }}
 
           int {prefix}nu(MPCstruct* m) {{
 
-          }}
-
-          int {prefix}set_p_by_id(MPCstruct* m, const char* id, const casadi_real* value) {{
-            int i;
-            for (i=0;i<{len(parameters)};i++) {{
-              if (p_names[i]==id) {{
-                memcpy(m->p->data+{prefix}p_offsets[i], value, ({prefix}p_offsets[i+1]-{prefix}p_offsets[i])*sizeof(casadi_real));
-                return 0;
-              }}
-            }}
-            return 1;
           }}
 
           int {prefix}print_problem(MPCstruct* m) {{
@@ -763,7 +749,7 @@ class MPC(Ocp):
             }}
             m->res_casadi[0] = m->x_opt->data;
             m->res_casadi[1] = m->u_opt->data;
-            //return casadi_c_eval_id(m->id, m->arg_casadi, m->res_casadi, m->iw_casadi, m->w_casadi, m->mem);
+            return casadi_c_eval_id(m->id, m->arg_casadi, m->res_casadi, m->iw_casadi, m->w_casadi, m->mem);
           }}
 
           int {prefix}get_p_by_id(MPCstruct* m, const char* id, const casadi_real* value) {{
