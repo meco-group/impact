@@ -203,7 +203,7 @@ class MPC(Ocp):
 
   def export(self,name,dir="."):
     build_dir_rel = name+"_build_dir"
-    build_dir_abs = os.path.join(dir,build_dir_rel)
+    build_dir_abs = os.path.join(os.path.abspath(dir),build_dir_rel)
     os.makedirs(build_dir_abs,exist_ok=True)
 
     [_,states] = self.sample(self.x,grid='control')
@@ -281,6 +281,19 @@ class MPC(Ocp):
           assert(n==2);
           assert(t[0]==2.0);
           assert(t[1]==13.0);
+
+          int n_row;
+          int n_col;
+          get_size(m, "u_opt", MPC_ALL, &n_row, &n_col);
+          printf("dims %d %d\\n",n_row,n_col);
+
+          casadi_int sz_arg, sz_res, sz_iw, sz_w;
+
+
+
+          work(m, &sz_arg, &sz_res, &sz_iw, &sz_w);
+          printf("work %lld %lld %lld %lld\\n",sz_arg,sz_res,sz_iw,sz_w);
+
 
           solve(m);
 
@@ -371,7 +384,14 @@ class MPC(Ocp):
           int {prefix}set(MPCstruct* m, const char* pool_name, const char* id, int stage, const double* src, int src_flags);
 
 
+          int {prefix}get_id_count(MPCstruct* m, const char* pool_name);
+          int {prefix}get_id_from_index(MPCstruct* m, const char* pool_name, int index, const char** id);
+          int {prefix}get_size(MPCstruct* m, const char* pool_name, const char* id, int* n_row, int* n_col);
+
           int {prefix}print_problem(MPCstruct* m);
+          void {prefix}set_work(MPCstruct* m, const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w);
+          void {prefix}work(MPCstruct* m, casadi_int* sz_arg, casadi_int* sz_res, casadi_int* sz_iw, casadi_int* sz_w);
+
 
       """
       )
@@ -393,11 +413,20 @@ class MPC(Ocp):
     x_names = ['"'+x.name()+'"' for x in self.states]
     u_names = ['"'+u.name()+'"' for u in self.controls]
 
+    i_x_current = None
+    count = 0
+
     p_part_offset = [0]
     p_part_unit = []
     for p_symbol,p_sampled in zip(parameters_symbols,parameters):
+      if p_symbol.name()=="x_current":
+        i_x_current = count
+      count += 1
       p_part_unit.append(p_symbol.numel())
       p_part_offset.append(p_part_offset[-1]+p_sampled.numel())
+
+    if i_x_current is None:
+      raise Exception("You must define a parameter named 'x_current'")
 
     x_part_offset = [0]
     x_part_unit = []
@@ -458,8 +487,8 @@ class MPC(Ocp):
           static const casadi_real {prefix}x_current_nominal[{x_current_nominal.size}] = {{ {",".join("%0.16f" % e for e in x_current_nominal)} }};
 
           static const char* {prefix}pool_names[4] = {{"x_current","x_initial_guess","u_initial_guess","p"}};
-          void {prefix}set_work(MPCstruct* m, const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w);
-          void {prefix}work(MPCstruct* m, casadi_int* sz_arg, casadi_int* sz_res, casadi_int* sz_iw, casadi_int* sz_w);
+
+
 
 
 
@@ -503,8 +532,9 @@ class MPC(Ocp):
             }}
 
             m->id = casadi_c_id("{casadi_fun_name}");
+            m->info(m, "test %d\\n", m->id);
             if (m->id<0) {{
-              m->fatal(m, "initialize", "Could locate function with name '{casadi_fun_name}'.\\n");
+              m->fatal(m, "initialize", "Could not locate function with name '{casadi_fun_name}'.\\n");
               {prefix}destroy(m);
               return 0;
             }}
@@ -547,7 +577,7 @@ class MPC(Ocp):
             m->x_current = malloc(sizeof(MPCpool));
             m->x_current->names = {prefix}x_names;
             m->x_current->size = {self.nx};
-            m->x_current->data = malloc(sizeof(casadi_real)*{self.nx});
+            m->x_current->data = m->p->data+m->p->part_offset[{i_x_current}];
             m->x_current->n = {len(self.states)};
             m->x_current->trajectory_length = {prefix}x_current_trajectory_length;
             m->x_current->stride = {self.nx};
@@ -624,7 +654,7 @@ class MPC(Ocp):
           }}
 
           void {prefix}work(MPCstruct* m, casadi_int* sz_arg, casadi_int* sz_res, casadi_int* sz_iw, casadi_int* sz_w) {{
-            casadi_c_work_id(m->id, &m->sz_arg, &m->sz_res, &m->sz_iw, &m->sz_w);
+            casadi_c_work_id(m->id, sz_arg, sz_res, sz_iw, sz_w);
             // We might want to be adding other working memory here
           }}
 
@@ -650,6 +680,83 @@ class MPC(Ocp):
                                        Use one of: 'p','x_initial_guess','u_initial_guess','u_opt','x_opt'. \\n", name);
               return 0;
             }}
+          }}
+
+
+          int {prefix}get_id_count(MPCstruct* m, const char* pool) {{
+            const MPCpool* p;
+            if (!pool) {{
+              m->fatal(m, "get_id_count (ret code -1)", "You may not pass a null pointer as pool. \\n");
+              return -1;
+            }}
+            p = {prefix}get_pool_by_name(m, pool);
+            if (!p) {{
+              m->fatal(m, "get_id_count (ret code -2)", "Failed to find a pool named '%s'. \\n", pool);
+              return -2;
+            }}
+            return p->n;
+          }}
+
+          int {prefix}get_id_from_index(MPCstruct* m, const char* pool, int index, const char** id) {{
+            int i;
+            const MPCpool* p;
+            if (!pool) {{
+              m->fatal(m, "get_id_from_index (ret code -1)", "You may not pass a null pointer as pool. \\n");
+              return -1;
+            }}
+            p = {prefix}get_pool_by_name(m, pool);
+            if (!p) {{
+              m->fatal(m, "get_id_from_index (ret code -2)", "Failed to find a pool named '%s'. \\n", pool);
+              return -2;
+            }}
+            if (index<0 || index>= p->n) {{
+              m->fatal(m, "get_id_from_index (ret code -3)", "Index %d is out of bounds for pool %s: need [0,%d[. \\n", index, pool, p->n);
+              return -3;
+            }}
+            *id = p->names[index];
+
+            return 0;
+          }}
+
+
+          int {prefix}get_size(MPCstruct* m, const char* pool, const char* id, int* n_row, int* n_col) {{
+            int index, i;
+            const MPCpool* p;
+            if (!pool) {{
+              m->fatal(m, "get_size (ret code -1)", "You may not pass a null pointer as pool. \\n");
+              return -1;
+            }}
+            p = {prefix}get_pool_by_name(m, pool);
+            if (!p) {{
+              m->fatal(m, "get_size (ret code -2)", "Failed to find a pool named '%s'. \\n", pool);
+              return -2;
+            }}
+
+            // Determine index
+            index = -1;
+            if (id!=MPC_ALL) {{
+              for (i=0;i<p->n;++i) {{
+                if (!strcmp(id, p->names[i])) break;
+              }}
+              if (i==p->n) {{
+                m->fatal(m, "get_id_from_index (ret code -4)", "Id '%s' not found for pool '%s'. Use one of these options: \\n", id, pool);
+                for (i=0;i<p->n;++i) {{
+                  m->fatal(m, 0, " - %s\\n", p->names[i]);
+                }}
+                return -4;
+              }}
+              index = i;
+            }}
+
+            if (index==-1) {{
+              *n_row = p->stride;
+              *n_col = p->trajectory_length[0];
+            }} else {{
+              *n_row = p->part_unit[index];
+              *n_col = p->trajectory_length[index];
+            }}
+
+            return 0;
           }}
 
           int {prefix}set_get(MPCstruct* m, const char* pool, const char* id, int stage, double* data, int data_flags, char mode) {{
@@ -798,203 +905,159 @@ class MPC(Ocp):
     args = ["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-L"+build_dir_abs,"-o",hello_file_name,"-Wl,-rpath="+build_dir_abs]
     print(" ".join(args))
     subprocess.Popen(args).wait()
+
+    s_function_name = name+"_s_function_level2"
+
+    s_function_file_name = os.path.join(build_dir_abs,s_function_name+".c")
       
-    """
-    #define S_FUNCTION_NAME  casadi_fun
-#define S_FUNCTION_LEVEL 2
+    with open(s_function_file_name,"w") as out:
+      out.write(f"""
+        #define S_FUNCTION_NAME {s_function_name}
+        #define S_FUNCTION_LEVEL 2
 
-#include <casadi/casadi_c.h>
+        #include <{name}.h>
 
-#include "simstruc.h"
+        #include "simstruc.h"
 
-static int id = -1;
-static int ret = -1;
+        MPCstruct* m;
+        struct {{
+          int sz_arg;
+          int n_p;
+        }} config;
 
-static casadi_int n_in, n_out;
-static casadi_int sz_arg, sz_res, sz_iw, sz_w;
+        void cleanup() {{
+          if (m) {{
+            destroy(m);
+          }}
+        }}
 
-static int mem;
+        static void mdlInitializeSizes(SimStruct *S) {{
+            int i;
+            int n_row, n_col;
+            const char* id;
+            casadi_int sz_arg, sz_res, sz_iw, sz_w;
+            m = 0;
 
-
-void cleanup() {
-  if (ret==0) {
-    casadi_c_pop();
-    ret = -1;
-  }
-}
-
-static void mdlInitializeSizes(SimStruct *S)
-{
-    int_T i;
-    const casadi_int* sp;
-    const char *file_name;
-    const char *function_name;
-    ssSetNumSFcnParams(S, 2);
-    if (ssGetNumSFcnParams(S) != ssGetSFcnParamsCount(S)) {
-        return; /* Parameter mismatch will be reported by Simulink */
-    }
-
-    if (!mxIsChar(ssGetSFcnParam(S, 0))) {
-      mexErrMsgIdAndTxt( "MATLAB:s_function:invalidParameter",
-                         "file name must be a string.");
-    }
-    if (!mxIsChar(ssGetSFcnParam(S, 1))) {
-      mexErrMsgIdAndTxt( "MATLAB:s_function:invalidParameter",
-                         "function name must be a string.");
-    }
-    
-    file_name = mxArrayToString(ssGetSFcnParam(S, 0));
-
-    if (!file_name) {
-      mexErrMsgIdAndTxt( "MATLAB:s_function:invalidParameter",
-                         "file name must be a string.");
-    }
-    function_name = mxArrayToString(ssGetSFcnParam(S, 1));
-    if (!function_name) {
-      mexErrMsgIdAndTxt( "MATLAB:s_function:invalidParameter",
-                         "function name must be a string.");
-    }
-
-    // Simulink does not provide a cleanup-hook when parameters are changed
-    cleanup();
-
-    // Load file
-    mexPrintf("Loading file '%s'...", file_name);
-    ret = casadi_c_push_file(file_name);
-    mxFree(file_name);
-
-    if (ret) {
-      mexErrMsgIdAndTxt( "MATLAB:s_function:Load",
-                         "Failed to load file.");
-    }
-    mexPrintf("success\n");
-
-    // Load function
-    mexPrintf("Locating function '%s'...", function_name);
-    id = casadi_c_id(function_name);
-    mxFree(function_name);
-    if (id<0) {
-      casadi_c_pop();
-      mexErrMsgIdAndTxt( "MATLAB:s_function:Load",
-                         "Failed to locate function in loaded file.");
-    }
-    mexPrintf("success\n");
+            // Simulink does not provide a cleanup-hook when parameters are changed
+            cleanup();
 
 
-    /* Read in CasADi function dimensions */
-    n_in = casadi_c_n_in_id(id);
-    n_out = casadi_c_n_out_id(id);
-    casadi_c_work_id(id, &sz_arg, &sz_res, &sz_iw, &sz_w);
-    
-    /* Set up simulink input/output ports */
-    if (!ssSetNumInputPorts(S, n_in)) return;
-    for (i=0;i<n_in;++i) {
-       sp = casadi_c_sparsity_in_id(id, i);
-      /* Dense inputs assumed here */
-      ssSetInputPortDirectFeedThrough(S, i, 1);
-      casadi_int nnz = sp[2+sp[1]];
-      if (nnz!=sp[0]*sp[1]) {
-        casadi_c_pop();
-        mexErrMsgIdAndTxt( "MATLAB:s_function:sparsity",
-                         "This example only supports dense inputs.");
-      }
-      ssSetInputPortMatrixDimensions(S, i, sp[0], sp[1]);
-    }
+            MPCstruct* m = initialize(mexPrintf);
 
-    if (!ssSetNumOutputPorts(S, n_out)) return;
-    for (i=0;i<n_out;++i) {
-      sp = casadi_c_sparsity_out_id(id, i);
-      casadi_int nnz = sp[2+sp[1]];
-      /* Dense outputs assumed here */
-      if (nnz!=sp[0]*sp[1]) {
-        casadi_c_pop();
-        mexErrMsgIdAndTxt( "MATLAB:s_function:sparsity",
-                         "This example only supports dense outputs. Use 'densify'.");
-      }
-      ssSetOutputPortMatrixDimensions(S, i, sp[0], sp[1]);
-    }
+            if (!m) {{
+              cleanup();
+              mexErrMsgIdAndTxt( "MATLAB:s_function:invalidParameter",
+                                "Failed to initialize.");
+            }}
+            print_problem(m);
 
-    ssSetNumSampleTimes(S, 1);
-    
-    /* Set up CasADi function work vector sizes */
-    ssSetNumRWork(S, sz_w);
-    ssSetNumIWork(S, sz_iw*sizeof(casadi_int)/sizeof(int_T));
-    ssSetNumPWork(S, sz_arg+sz_res);
-    ssSetNumNonsampledZCs(S, 0);
+            /* Read work vector requirements */
+            work(m, &sz_arg, &sz_res, &sz_iw, &sz_w);
 
-    /* specify the sim state compliance to be same as a built-in block */
-    ssSetSimStateCompliance(S, USE_DEFAULT_SIM_STATE);
+            /* Set up CasADi function work vector sizes */
+            ssSetNumRWork(S, sz_w);
+            ssSetNumIWork(S, sz_iw*sizeof(casadi_int)/sizeof(int_T));
+            ssSetNumPWork(S, sz_arg+sz_res);
 
-    // Make sure mdlTerminate is called on error
-    ssSetOptions(S,
-                 SS_OPTION_WORKS_WITH_CODE_REUSE |
-                 SS_OPTION_EXCEPTION_FREE_CODE |
-                 SS_OPTION_USE_TLC_WITH_ACCELERATOR);
-}
+            int n_p = get_id_count(m, "p");
+            if (!ssSetNumInputPorts(S, n_p+1)) return;
+            if (n_p<0) {{
+              cleanup();
+              mexErrMsgIdAndTxt( "MATLAB:s_function:invalidParameter",
+                                "Failure.");
+            }}
+            for (i=0;i<n_p;++i) {{
+              get_id_from_index(m, "p", i, &id);
+              get_size(m, "p", id, &n_row, &n_col);
+              ssSetInputPortDirectFeedThrough(S, i, 1);
+              ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
+            }}
 
-/* Function: mdlInitializeSampleTimes =========================================
- * Abstract:
- *    Specifiy that we inherit our sample time from the driving block.
- */
-static void mdlInitializeSampleTimes(SimStruct *S)
-{
-    ssSetSampleTime(S, 0, INHERITED_SAMPLE_TIME);
-    ssSetOffsetTime(S, 0, 0.0);
-    ssSetModelReferenceSampleTimeDefaultInheritance(S); 
-}
+            get_size(m, "x_current", MPC_ALL, &n_row, &n_col);
+            ssSetInputPortDirectFeedThrough(S, i, 1);
+            ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
 
-static void mdlOutputs(SimStruct *S, int_T tid)
-{
-    void** p;
-    const real_T** arg;
-    double* w;
-    casadi_int* iw;
-    int_T i;
+            if (!ssSetNumOutputPorts(S, 1)) return;
 
-    /* Set up CasADi function work vectors */
-    p = ssGetPWork(S);
-    arg = (const real_T**) p;
-    p += sz_arg;
-    real_T** res = (real_T**) p;
-    w = ssGetRWork(S);
-    iw = (casadi_int*) ssGetIWork(S);
-    
-    
-    /* Point to input and output buffers */  
-    for (i=0; i<n_in;++i) {
-      arg[i] = *ssGetInputPortRealSignalPtrs(S,i);
-    }
-    for (i=0; i<n_out;++i) {
-      res[i] = ssGetOutputPortRealSignal(S,i);
-    }
+            get_size(m, "u_opt", 0, &n_row, &n_col);
+            ssSetOutputPortMatrixDimensions(S, 0, n_row, 1);
 
-    /* Run the CasADi function */
-    if (casadi_c_eval_id(id, arg, res, iw, w, mem)) {
-      ssPrintf("Failed to evaluate\n");
-    }
-}
+            ssSetNumSampleTimes(S, 1);
+            
+            ssSetNumNonsampledZCs(S, 0);
 
-static void mdlStart(SimStruct *S)
-{
-    // Allocate memory (thread-safe)
-    casadi_c_incref_id(id);
-    // Checkout thread-local memory (not thread-safe)
-    mem = casadi_c_checkout_id(id);
-}
+            /* specify the sim state compliance to be same as a built-in block */
+            ssSetSimStateCompliance(S, USE_DEFAULT_SIM_STATE);
 
-static void mdlTerminate(SimStruct *S) {
-  /* Free memory (thread-safe) */
-  casadi_c_decref_id(id);
-  // Release thread-local (not thread-safe)
-  casadi_c_release_id(id, mem);
+            // Make sure mdlTerminate is called on error
+            ssSetOptions(S,
+                        SS_OPTION_WORKS_WITH_CODE_REUSE |
+                        SS_OPTION_EXCEPTION_FREE_CODE |
+                        SS_OPTION_USE_TLC_WITH_ACCELERATOR);
+        }}
 
-  cleanup();
-}
+        /* Function: mdlInitializeSampleTimes =========================================
+        * Abstract:
+        *    Specifiy that we inherit our sample time from the driving block.
+        */
+        static void mdlInitializeSampleTimes(SimStruct *S)
+        {{
+            ssSetSampleTime(S, 0, INHERITED_SAMPLE_TIME);
+            ssSetOffsetTime(S, 0, 0.0);
+            ssSetModelReferenceSampleTimeDefaultInheritance(S); 
+        }}
+
+        static void mdlOutputs(SimStruct *S, int_T tid)
+        {{
+            void** p;
+            const real_T** arg;
+            double* w;
+            casadi_int* iw;
+            int_T i;
+            const char* id;
+
+            /* Set up CasADi function work vectors */
+            p = ssGetPWork(S);
+            arg = (const real_T**) p;
+            p += config.sz_arg;
+            real_T** res = (real_T**) p;
+            w = ssGetRWork(S);
+            iw = (casadi_int*) ssGetIWork(S);
+
+            set_work(m, arg, res, iw, w);
+            
+            /* Point to input and output buffers */  
+            for (i=0; i<ssGetNumInputPorts(S);++i) {{
+              get_id_from_index(m, "p", i, &id);
+              set(m, "p", id, MPC_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), MPC_FULL);
+            }}
+            get_id_from_index(m, "x_current", i, &id);
+            set(m, "x_current", id, MPC_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), MPC_FULL);
+
+            print_problem(m);
+
+            get(m, "u_opt", MPC_ALL, 0, ssGetOutputPortRealSignal(S, 0), MPC_FULL);
+
+        }}
+
+        static void mdlStart(SimStruct *S) {{
+        }}
+
+        static void mdlTerminate(SimStruct *S) {{
+          cleanup();
+        }}
 
 
-#ifdef  MATLAB_MEX_FILE    /* Is this file being compiled as a MEX-file? */
-#include "simulink.c"      /* MEX-file interface mechanism */
-#else
-#include "cg_sfun.h"       /* Code generation registration function */
-#endif
-"""
+        #ifdef  MATLAB_MEX_FILE    /* Is this file being compiled as a MEX-file? */
+        #include "simulink.c"      /* MEX-file interface mechanism */
+        #else
+        #include "cg_sfun.h"       /* Code generation registration function */
+        #endif
+        """)
+
+    m_build_file_name = os.path.join(build_dir_abs,"build.m")
+      
+    with open(m_build_file_name,"w") as out:
+      out.write(f"""
+        mex('-v','-g',['-I{build_dir_abs}'],['-L{build_dir_abs}'],'-l{name}','CFLAGS="\$CFLAGS -Wl,-rpath,{build_dir_abs}"', '{s_function_file_name}')
+       """)
