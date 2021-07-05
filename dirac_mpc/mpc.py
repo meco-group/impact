@@ -283,7 +283,7 @@ class MPC(Ocp):
         #include <assert.h>
 
         int main() {{
-          MPCstruct* m = initialize(printf);
+          IMPACT_struct* m = initialize(printf);
           if (!m) {{
             printf("Failed to initialize\\n");
             return 1;
@@ -295,17 +295,17 @@ class MPC(Ocp):
 
           double t[2] = {{42, 43}};
           
-          n = set(m, "x_initial_guess", "scara.joint_vel", MPC_EVERYWHERE, t, MPC_HREP);
+          n = set(m, "x_initial_guess", "scara.joint_vel", IMPACT_EVERYWHERE, t, IMPACT_HREP);
           assert(n==2);
           print_problem(m);
           t[0] = 3;t[1] = 7;
-          n = set(m, "x_initial_guess", "scara.joint_vel", 2, t, MPC_HREP);
+          n = set(m, "x_initial_guess", "scara.joint_vel", 2, t, IMPACT_HREP);
           assert(n==2);
           print_problem(m);
 
           double t4[4] = {{0.1, 0.2, 0.3, 0.4}};
 
-          n = set(m, "x_initial_guess", MPC_ALL, 3, t4, MPC_HREP);
+          n = set(m, "x_initial_guess", IMPACT_ALL, 3, t4, IMPACT_HREP);
           assert(n==4);
           print_problem(m);
 
@@ -313,30 +313,30 @@ class MPC(Ocp):
           for (int i=0;i<44;++i) {{
             t44[i] = i;
           }}
-          n = set(m, "x_initial_guess", MPC_ALL, MPC_EVERYWHERE, t44, MPC_FULL);
+          n = set(m, "x_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, t44, IMPACT_FULL);
           assert(n==44);
           print_problem(m);
 
-          n = set(m, "x_initial_guess", MPC_ALL, MPC_EVERYWHERE, t44, MPC_FULL | MPC_ROW_MAJOR);
+          n = set(m, "x_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, t44, IMPACT_FULL | IMPACT_ROW_MAJOR);
           assert(n==44);
           print_problem(m);
 
-          n = set(m, "x_initial_guess", "scara.joint_vel", MPC_EVERYWHERE, t44, MPC_FULL | MPC_ROW_MAJOR);
+          n = set(m, "x_initial_guess", "scara.joint_vel", IMPACT_EVERYWHERE, t44, IMPACT_FULL | IMPACT_ROW_MAJOR);
           assert(n==22);
           print_problem(m);
 
-          n = get(m, "x_initial_guess", "scara.joint_vel", 2, t, MPC_HREP);
+          n = get(m, "x_initial_guess", "scara.joint_vel", 2, t, IMPACT_HREP);
           assert(n==2);
           assert(t[0]==2.0);
           assert(t[1]==13.0);
-          n = get(m, "x_initial_guess", "scara.joint_vel", 2, t, MPC_FULL);
+          n = get(m, "x_initial_guess", "scara.joint_vel", 2, t, IMPACT_FULL);
           assert(n==2);
           assert(t[0]==2.0);
           assert(t[1]==13.0);
 
           int n_row;
           int n_col;
-          get_size(m, "u_opt", MPC_ALL, &n_row, &n_col);
+          get_size(m, "u_opt", IMPACT_ALL, &n_row, &n_col);
           printf("dims %d %d\\n",n_row,n_col);
 
           casadi_int sz_arg, sz_res, sz_iw, sz_w;
@@ -363,7 +363,7 @@ class MPC(Ocp):
         int main() {{
           int i, j, n_row, n_col;
           double *u_scratch, *x_scratch;
-          MPCstruct* m = impact_initialize(printf);
+          IMPACT_struct* m = impact_initialize(printf);
           if (!m) {{
             printf("Failed to initialize\\n");
             return 1;
@@ -374,18 +374,18 @@ class MPC(Ocp):
           impact_solve(m);
 
           // Allocate scratch space for state and control trajectories
-          impact_get_size(m, "u_opt", MPC_ALL, MPC_EVERYWHERE, MPC_FULL, &n_row, &n_col);
+          impact_get_size(m, "u_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
           printf("u_opt dims: %d - %d\\n", n_row, n_col);
           //u_scratch = malloc(sizeof(double)*n_row*n_col);
           u_scratch = malloc(sizeof(double)*n_row);
 
-          impact_get_size(m, "x_opt", MPC_ALL, MPC_EVERYWHERE, MPC_FULL, &n_row, &n_col);
+          impact_get_size(m, "x_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
           printf("x_opt dims: %d - %d\\n", n_row, n_col);
           x_scratch = malloc(sizeof(double)*n_row*n_col);
 
           printf("Single OCP\\n");
 
-          impact_get(m, "x_opt", MPC_ALL, MPC_EVERYWHERE, x_scratch, MPC_FULL | MPC_ROW_MAJOR);
+          impact_get(m, "x_opt", IMPACT_ALL, IMPACT_EVERYWHERE, x_scratch, IMPACT_FULL);
           for (i=0;i<n_col;++i) {{
             for (j=0;j<n_row;++j) {{
               printf("%0.3e ", x_scratch[i*n_row+j]);
@@ -401,9 +401,9 @@ class MPC(Ocp):
   
           for (i=0;i<100;++i) {{
             impact_solve(m);
-            impact_get(m, "u_opt", MPC_ALL, 0, u_scratch, MPC_FULL | MPC_ROW_MAJOR);
-            impact_get(m, "x_opt", MPC_ALL, 1, x_scratch, MPC_FULL | MPC_ROW_MAJOR);
-            impact_set(m, "x_current", MPC_ALL, 0, x_scratch, MPC_FULL | MPC_ROW_MAJOR);
+            impact_get(m, "u_opt", IMPACT_ALL, 0, u_scratch, IMPACT_FULL);
+            impact_get(m, "x_opt", IMPACT_ALL, 1, x_scratch, IMPACT_FULL);
+            impact_set(m, "x_current", IMPACT_ALL, 0, x_scratch, IMPACT_FULL);
 
             for (j=0;j<n_row;++j) {{
               printf("%0.3e ", x_scratch[j]);
@@ -420,13 +420,13 @@ class MPC(Ocp):
 
     with open(h_file_name,"w") as out:
       for flag_name, flag_value in flags.items():
-        out.write(f"#define MPC_{flag_name} {flag_value}\n")
+        out.write(f"#define IMPACT_{flag_name} {flag_value}\n")
 
       out.write(f"""
 #define casadi_real double
 #define casadi_int long long int
 
-typedef struct MPC_pool {{
+typedef struct IMPACT_pool {{
   casadi_int n;
   casadi_int size;            
   const char** names; // length n
@@ -438,14 +438,14 @@ typedef struct MPC_pool {{
   casadi_int stride;
 }} MPCpool;
 
-struct MPCstruct;
-typedef struct MPC_struct MPCstruct;
+struct IMPACT_struct;
+typedef struct IMPACTstruct IMPACT_struct;
 
 typedef int (*formatter)(const char * s);
-typedef void (*fatal_fp)(MPCstruct* m, const char * loc, const char * fmt, ...);
-typedef void (*info_fp)(MPCstruct* m, const char * fmt, ...);
+typedef void (*fatal_fp)(IMPACT_struct* m, const char * loc, const char * fmt, ...);
+typedef void (*info_fp)(IMPACT_struct* m, const char * fmt, ...);
 
-typedef struct MPC_struct {{
+typedef struct IMPACTstruct {{
   int id;
   int pop; // need to pop when destroyed?
   casadi_int n_in;
@@ -480,33 +480,33 @@ typedef struct MPC_struct {{
   formatter fp;
   fatal_fp fatal;
   info_fp info;
-}} MPCstruct;
+}} IMPACT_struct;
 
-MPCstruct* {prefix}initialize();
-void {prefix}destroy(MPCstruct* m);
+IMPACT_struct* {prefix}initialize();
+void {prefix}destroy(IMPACT_struct* m);
 
-int {prefix}solve(MPCstruct* m);
+int {prefix}solve(IMPACT_struct* m);
 
 /*
 *   
 */
 
-int {prefix}get(MPCstruct* m, const char* pool_name, const char* id, int stage, double* dst, int dst_flags);
-int {prefix}set(MPCstruct* m, const char* pool_name, const char* id, int stage, const double* src, int src_flags);
+int {prefix}get(IMPACT_struct* m, const char* pool_name, const char* id, int stage, double* dst, int dst_flags);
+int {prefix}set(IMPACT_struct* m, const char* pool_name, const char* id, int stage, const double* src, int src_flags);
 
 
-int {prefix}get_id_count(MPCstruct* m, const char* pool_name);
-int {prefix}get_id_from_index(MPCstruct* m, const char* pool_name, int index, const char** id);
-int {prefix}get_size(MPCstruct* m, const char* pool_name, const char* id, int stage, int flags, int* n_row, int* n_col);
-int {prefix}print_problem(MPCstruct* m);    
+int {prefix}get_id_count(IMPACT_struct* m, const char* pool_name);
+int {prefix}get_id_from_index(IMPACT_struct* m, const char* pool_name, int index, const char** id);
+int {prefix}get_size(IMPACT_struct* m, const char* pool_name, const char* id, int stage, int flags, int* n_row, int* n_col);
+int {prefix}print_problem(IMPACT_struct* m);    
 
-int {prefix}allocate(MPCstruct* m);
-void {prefix}set_work(MPCstruct* m, const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w);
-void {prefix}work(MPCstruct* m, casadi_int* sz_arg, casadi_int* sz_res, casadi_int* sz_iw, casadi_int* sz_w);
+int {prefix}allocate(IMPACT_struct* m);
+void {prefix}set_work(IMPACT_struct* m, const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w);
+void {prefix}work(IMPACT_struct* m, casadi_int* sz_arg, casadi_int* sz_res, casadi_int* sz_iw, casadi_int* sz_w);
 
-int {prefix}flag_size(MPCstruct* m);
-const char* {prefix}flag_name(MPCstruct* m, int index);
-int {prefix}flag_value(MPCstruct* m, int index);
+int {prefix}flag_size(IMPACT_struct* m);
+const char* {prefix}flag_name(IMPACT_struct* m, int index);
+int {prefix}flag_value(IMPACT_struct* m, int index);
 
       """
       )
@@ -605,23 +605,23 @@ int {prefix}flag_value(MPCstruct* m, int index);
 
 
           static const char* {prefix}flag_names[{len(flags)}] = {{ {",".join('"%s"' % e for e in flags.keys())} }};
-          static int {prefix}flag_values[{len(flags)}] = {{ {",".join("MPC_" + e for e in flags.keys())} }};
+          static int {prefix}flag_values[{len(flags)}] = {{ {",".join("IMPACT_" + e for e in flags.keys())} }};
 
-          int {prefix}flag_size(MPCstruct* m) {{
+          int {prefix}flag_size(IMPACT_struct* m) {{
             return {len(flags)};
           }}
-          const char* {prefix}flag_name(MPCstruct* m, int index) {{
+          const char* {prefix}flag_name(IMPACT_struct* m, int index) {{
             if (index<0 || index>={len(flags)}) return 0;
             return {prefix}flag_names[index];
           }}
-          int {prefix}flag_value(MPCstruct* m, int index) {{
+          int {prefix}flag_value(IMPACT_struct* m, int index) {{
             if (index<0 || index>={len(flags)}) return 0;
             return {prefix}flag_values[index];
           }}
 
 
 
-          void {prefix}fatal(MPCstruct* m, const char* loc, const char* fmt, ...) {{
+          void {prefix}fatal(IMPACT_struct* m, const char* loc, const char* fmt, ...) {{
             va_list args;
             char buffer[1024];
             if (m->fp) {{
@@ -635,7 +635,7 @@ int {prefix}flag_value(MPCstruct* m, int index);
               va_end(args);
             }}
           }}
-          void {prefix}info(MPCstruct* m, const char* fmt, ...) {{
+          void {prefix}info(IMPACT_struct* m, const char* fmt, ...) {{
             va_list args;
             char buffer[1024];
             if (m->fp) {{
@@ -647,10 +647,10 @@ int {prefix}flag_value(MPCstruct* m, int index);
           }}
 
 
-          MPCstruct* {prefix}initialize(formatter fp) {{
+          IMPACT_struct* {prefix}initialize(formatter fp) {{
             int flag;
-            MPCstruct* m;
-            m = malloc(sizeof(MPCstruct));
+            IMPACT_struct* m;
+            m = malloc(sizeof(IMPACT_struct));
             m->fp = fp;
             m->fatal = {prefix}fatal;
             m->info = {prefix}info;
@@ -770,7 +770,7 @@ int {prefix}flag_value(MPCstruct* m, int index);
             return m;
           }}
 
-          void {prefix}destroy(MPCstruct* m) {{
+          void {prefix}destroy(IMPACT_struct* m) {{
             /* Free memory (thread-safe) */
             casadi_c_decref_id(m->id);
             // Release thread-local (not thread-safe)
@@ -779,23 +779,23 @@ int {prefix}flag_value(MPCstruct* m, int index);
             free(m);
           }}
 
-          void {prefix}set_work(MPCstruct* m, const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w) {{
+          void {prefix}set_work(IMPACT_struct* m, const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w) {{
             m->arg = arg;
             m->res = res;
             m->iw = iw;
             m->w = w;
           }}
 
-          void {prefix}work(MPCstruct* m, casadi_int* sz_arg, casadi_int* sz_res, casadi_int* sz_iw, casadi_int* sz_w) {{
+          void {prefix}work(IMPACT_struct* m, casadi_int* sz_arg, casadi_int* sz_res, casadi_int* sz_iw, casadi_int* sz_w) {{
             casadi_c_work_id(m->id, sz_arg, sz_res, sz_iw, sz_w);
             // We might want to be adding other working memory here
           }}
 
-          int {prefix}nx(MPCstruct* m) {{
+          int {prefix}nx(IMPACT_struct* m) {{
 
           }}
 
-          const MPCpool* {prefix}get_pool_by_name(MPCstruct* m, const char* name) {{
+          const MPCpool* {prefix}get_pool_by_name(IMPACT_struct* m, const char* name) {{
             if (!strcmp(name,"p")) {{
               return m->p;
             }} else if (!strcmp(name,"x_current")) {{
@@ -816,7 +816,7 @@ int {prefix}flag_value(MPCstruct* m, int index);
           }}
 
 
-          int {prefix}get_id_count(MPCstruct* m, const char* pool) {{
+          int {prefix}get_id_count(IMPACT_struct* m, const char* pool) {{
             const MPCpool* p;
             if (!pool) {{
               m->fatal(m, "get_id_count (ret code -1)", "You may not pass a null pointer as pool. \\n");
@@ -830,7 +830,7 @@ int {prefix}flag_value(MPCstruct* m, int index);
             return p->n;
           }}
 
-          int {prefix}get_id_from_index(MPCstruct* m, const char* pool, int index, const char** id) {{
+          int {prefix}get_id_from_index(IMPACT_struct* m, const char* pool, int index, const char** id) {{
             int i;
             const MPCpool* p;
             if (!pool) {{
@@ -852,7 +852,7 @@ int {prefix}flag_value(MPCstruct* m, int index);
           }}
 
 
-          int {prefix}get_size(MPCstruct* m, const char* pool, const char* id, int stage, int flags, int* n_row, int* n_col) {{
+          int {prefix}get_size(IMPACT_struct* m, const char* pool, const char* id, int stage, int flags, int* n_row, int* n_col) {{
             int index, i;
             const MPCpool* p;
             if (!pool) {{
@@ -867,7 +867,7 @@ int {prefix}flag_value(MPCstruct* m, int index);
 
             // Determine index
             index = -1;
-            if (id!=MPC_ALL) {{
+            if (id!=IMPACT_ALL) {{
               for (i=0;i<p->n;++i) {{
                 if (!strcmp(id, p->names[i])) break;
               }}
@@ -889,12 +889,12 @@ int {prefix}flag_value(MPCstruct* m, int index);
               *n_col = p->trajectory_length[index];
             }}
 
-            if (stage!=MPC_EVERYWHERE) *n_col = 1;
+            if (stage!=IMPACT_EVERYWHERE) *n_col = 1;
 
             return 0;
           }}
 
-          int {prefix}set_get(MPCstruct* m, const char* pool, const char* id, int stage, double* data, int data_flags, char mode) {{
+          int {prefix}set_get(IMPACT_struct* m, const char* pool, const char* id, int stage, double* data, int data_flags, char mode) {{
             int i, j, k, index, i_start, i_stop, k_start, k_stop, offset, row, col, stride, data_i;
             const MPCpool* p;
             if (!pool) {{
@@ -913,7 +913,7 @@ int {prefix}flag_value(MPCstruct* m, int index);
 
             // Determine index
             index = -1;
-            if (id!=MPC_ALL) {{
+            if (id!=IMPACT_ALL) {{
               for (i=0;i<p->n;++i) {{
                 if (!strcmp(id, p->names[i])) break;
               }}
@@ -929,21 +929,21 @@ int {prefix}flag_value(MPCstruct* m, int index);
 
             i_start = index==-1? 0 : index;
             i_stop  = index==-1? p->n : index+1;
-            k_start = stage==MPC_EVERYWHERE? 0 : stage;
+            k_start = stage==IMPACT_EVERYWHERE? 0 : stage;
             offset = 0;
             data_i = -1;
             for (i=i_start;i<i_stop;++i) {{
-              row = id==MPC_ALL ? p->part_offset[i] : 0;
-              if (data_flags & MPC_ROW_MAJOR) {{
+              row = id==IMPACT_ALL ? p->part_offset[i] : 0;
+              if (data_flags & IMPACT_ROW_MAJOR) {{
                 stride = p->trajectory_length[i];
               }} else {{
-                stride = id==MPC_ALL ? p->part_stride[i] : p->part_unit[i];
+                stride = id==IMPACT_ALL ? p->part_stride[i] : p->part_unit[i];
               }}
               for (j=0;j<p->part_unit[i];++j) {{
-                k_stop  = stage==MPC_EVERYWHERE? p->trajectory_length[i] : stage+1;
+                k_stop  = stage==IMPACT_EVERYWHERE? p->trajectory_length[i] : stage+1;
                 for (k=k_start;k<k_stop;++k) {{
-                  col = (data_flags & MPC_HREP || stage!=MPC_EVERYWHERE) ? 0 : k;
-                  data_i = data_flags & MPC_ROW_MAJOR ? stride*row + col : row + stride*col;
+                  col = (data_flags & IMPACT_HREP || stage!=IMPACT_EVERYWHERE) ? 0 : k;
+                  data_i = data_flags & IMPACT_ROW_MAJOR ? stride*row + col : row + stride*col;
                   if (mode) {{
                     data[data_i] = p->data[j+ p->part_offset[i] + p->part_stride[i]*k];
                   }} else {{
@@ -956,11 +956,11 @@ int {prefix}flag_value(MPCstruct* m, int index);
             return data_i+1;
           }}
 
-          int {prefix}set(MPCstruct* m, const char* pool, const char* id, int stage, const double* src, int src_flags) {{
+          int {prefix}set(IMPACT_struct* m, const char* pool, const char* id, int stage, const double* src, int src_flags) {{
             return {prefix}set_get(m, pool, id, stage, (double*) src, src_flags, 0);
           }}
 
-          int {prefix}get(MPCstruct* m, const char* pool, const char* id, int stage, double* dst, int dst_flags) {{
+          int {prefix}get(IMPACT_struct* m, const char* pool, const char* id, int stage, double* dst, int dst_flags) {{
             return {prefix}set_get(m, pool, id, stage, dst, dst_flags, 1);
           }}
 
@@ -970,11 +970,11 @@ int {prefix}flag_value(MPCstruct* m, int index);
             return 0;
           }}
 
-          int {prefix}nu(MPCstruct* m) {{
+          int {prefix}nu(IMPACT_struct* m) {{
 
           }}
 
-          int {prefix}print_problem(MPCstruct* m) {{
+          int {prefix}print_problem(IMPACT_struct* m) {{
             int i,j,k,l,max_len;
             const MPCpool* p;
             max_len=0;
@@ -1010,7 +1010,7 @@ int {prefix}flag_value(MPCstruct* m, int index);
             }}
           }}
 
-          int {prefix}solve(MPCstruct* m) {{
+          int {prefix}solve(IMPACT_struct* m) {{
             int i;
             m->arg_casadi[0] = m->x_initial_guess->data;
             m->arg_casadi[1] = m->u_initial_guess->data;
@@ -1022,11 +1022,11 @@ int {prefix}flag_value(MPCstruct* m, int index);
             return casadi_c_eval_id(m->id, m->arg_casadi, m->res_casadi, m->iw_casadi, m->w_casadi, m->mem);
           }}
 
-          int {prefix}get_p_by_id(MPCstruct* m, const char* id, const casadi_real* value) {{
+          int {prefix}get_p_by_id(IMPACT_struct* m, const char* id, const casadi_real* value) {{
 
           }}
 
-          void {prefix}get_u(MPCstruct* m, double* value) {{
+          void {prefix}get_u(IMPACT_struct* m, double* value) {{
 
           }}
 
@@ -1057,7 +1057,7 @@ int {prefix}flag_value(MPCstruct* m, int index);
 
         #include "simstruc.h"
 
-        MPCstruct* m;
+        IMPACT_struct* m;
         struct {{
           int sz_arg;
           int n_p;
@@ -1080,7 +1080,7 @@ int {prefix}flag_value(MPCstruct* m, int index);
             cleanup();
 
 
-            MPCstruct* m = initialize(mexPrintf);
+            IMPACT_struct* m = initialize(mexPrintf);
 
             if (!m) {{
               cleanup();
@@ -1111,7 +1111,7 @@ int {prefix}flag_value(MPCstruct* m, int index);
               ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
             }}
 
-            get_size(m, "x_current", MPC_ALL, &n_row, &n_col);
+            get_size(m, "x_current", IMPACT_ALL, &n_row, &n_col);
             ssSetInputPortDirectFeedThrough(S, i, 1);
             ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
 
@@ -1167,14 +1167,14 @@ int {prefix}flag_value(MPCstruct* m, int index);
             /* Point to input and output buffers */  
             for (i=0; i<ssGetNumInputPorts(S);++i) {{
               get_id_from_index(m, "p", i, &id);
-              set(m, "p", id, MPC_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), MPC_FULL);
+              set(m, "p", id, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), IMPACT_FULL);
             }}
             get_id_from_index(m, "x_current", i, &id);
-            set(m, "x_current", id, MPC_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), MPC_FULL);
+            set(m, "x_current", id, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), IMPACT_FULL);
 
             print_problem(m);
 
-            get(m, "u_opt", MPC_ALL, 0, ssGetOutputPortRealSignal(S, 0), MPC_FULL);
+            get(m, "u_opt", IMPACT_ALL, 0, ssGetOutputPortRealSignal(S, 0), IMPACT_FULL);
 
         }}
 
