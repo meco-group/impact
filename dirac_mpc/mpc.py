@@ -361,21 +361,58 @@ class MPC(Ocp):
         #include <assert.h>
 
         int main() {{
-          MPCstruct* m = initialize(printf);
+          int i, j, n_row, n_col;
+          double *u_scratch, *x_scratch;
+          MPCstruct* m = impact_initialize(printf);
           if (!m) {{
             printf("Failed to initialize\\n");
             return 1;
           }}
 
-          print_problem(m);
+          impact_print_problem(m);
 
-          solve(m);
+          impact_solve(m);
 
-          //set_scalar(m, "x_initial_guess", "cart_pendulum.pos", 0, 0.5, MPC_HREP);
-                                                                                                                  
-          //n = set(m, "p", "current_x", 2, t, MPC_HREP);
+          // Allocate scratch space for state and control trajectories
+          impact_get_size(m, "u_opt", MPC_ALL, MPC_EVERYWHERE, MPC_FULL, &n_row, &n_col);
+          printf("u_opt dims: %d - %d\\n", n_row, n_col);
+          //u_scratch = malloc(sizeof(double)*n_row*n_col);
+          u_scratch = malloc(sizeof(double)*n_row);
 
-          destroy(m);
+          impact_get_size(m, "x_opt", MPC_ALL, MPC_EVERYWHERE, MPC_FULL, &n_row, &n_col);
+          printf("x_opt dims: %d - %d\\n", n_row, n_col);
+          x_scratch = malloc(sizeof(double)*n_row*n_col);
+
+          printf("Single OCP\\n");
+
+          impact_get(m, "x_opt", MPC_ALL, MPC_EVERYWHERE, x_scratch, MPC_FULL | MPC_ROW_MAJOR);
+          for (i=0;i<n_col;++i) {{
+            for (j=0;j<n_row;++j) {{
+              printf("%0.3e ", x_scratch[i*n_row+j]);
+            }}
+            printf("\\n");
+          }}
+
+          free(x_scratch);
+
+          x_scratch = malloc(sizeof(double)*n_row);
+
+          printf("Simulated MPC\\n");
+  
+          for (i=0;i<100;++i) {{
+            impact_solve(m);
+            impact_get(m, "u_opt", MPC_ALL, 0, u_scratch, MPC_FULL | MPC_ROW_MAJOR);
+            impact_get(m, "x_opt", MPC_ALL, 1, x_scratch, MPC_FULL | MPC_ROW_MAJOR);
+            impact_set(m, "x_current", MPC_ALL, 0, x_scratch, MPC_FULL | MPC_ROW_MAJOR);
+
+            for (j=0;j<n_row;++j) {{
+              printf("%0.3e ", x_scratch[j]);
+            }}
+            printf("\\n");
+
+          }}
+
+          impact_destroy(m);
         }}
       """
       )
@@ -460,7 +497,7 @@ int {prefix}set(MPCstruct* m, const char* pool_name, const char* id, int stage, 
 
 int {prefix}get_id_count(MPCstruct* m, const char* pool_name);
 int {prefix}get_id_from_index(MPCstruct* m, const char* pool_name, int index, const char** id);
-int {prefix}get_size(MPCstruct* m, const char* pool_name, const char* id, int* n_row, int* n_col);
+int {prefix}get_size(MPCstruct* m, const char* pool_name, const char* id, int stage, int flags, int* n_row, int* n_col);
 int {prefix}print_problem(MPCstruct* m);    
 
 int {prefix}allocate(MPCstruct* m);
@@ -637,8 +674,6 @@ int {prefix}flag_value(MPCstruct* m, int index);
               }}
             }}
 
-            m->info(m, "initialize ready %d", m->id);
-
             // Allocate memory (thread-safe)
             casadi_c_incref_id(m->id);
             // Checkout thread-local memory (not thread-safe)
@@ -724,7 +759,7 @@ int {prefix}flag_value(MPCstruct* m, int index);
             m->x_opt->data = malloc(sizeof(casadi_real)*{x_nominal.size});
             m->x_opt->n = {len(self.states)};
             m->x_opt->trajectory_length = {prefix}x_trajectory_length;
-            m->x_opt->stride = {self.nu};
+            m->x_opt->stride = {self.nx};
             m->x_opt->part_offset = {prefix}x_part_offset;
             m->x_opt->part_unit = {prefix}x_part_unit;
             m->x_opt->part_stride = {prefix}x_part_stride;
@@ -736,8 +771,6 @@ int {prefix}flag_value(MPCstruct* m, int index);
           }}
 
           void {prefix}destroy(MPCstruct* m) {{
-            m->info(m, "destroy\\n");
-                        // Allocate memory (thread-safe)
             /* Free memory (thread-safe) */
             casadi_c_decref_id(m->id);
             // Release thread-local (not thread-safe)
@@ -819,7 +852,7 @@ int {prefix}flag_value(MPCstruct* m, int index);
           }}
 
 
-          int {prefix}get_size(MPCstruct* m, const char* pool, const char* id, int* n_row, int* n_col) {{
+          int {prefix}get_size(MPCstruct* m, const char* pool, const char* id, int stage, int flags, int* n_row, int* n_col) {{
             int index, i;
             const MPCpool* p;
             if (!pool) {{
@@ -855,6 +888,8 @@ int {prefix}flag_value(MPCstruct* m, int index);
               *n_row = p->part_unit[index];
               *n_col = p->trajectory_length[index];
             }}
+
+            if (stage!=MPC_EVERYWHERE) *n_col = 1;
 
             return 0;
           }}
@@ -966,7 +1001,7 @@ int {prefix}flag_value(MPCstruct* m, int index);
                         m->info(m, " ");
                     }}
                     for (k=0;k<p->trajectory_length[i];++k) {{
-                      m->info(m, " %.4e (%d)", p->data[j+ p->part_offset[i] + p->part_stride[i]*k], j+ p->part_offset[i] + p->part_stride[i]*k);
+                      m->info(m, " %.4e", p->data[j+ p->part_offset[i] + p->part_stride[i]*k]);
                     }}
                     m->info(m, "\\n");
                   }}
@@ -1005,9 +1040,9 @@ int {prefix}flag_value(MPCstruct* m, int index);
     if p.returncode!=0:
       raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
     # breaks matlab
-    #p = subprocess.run(["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-L"+build_dir_abs,"-o",hello_file_name,"-Wl,-rpath="+build_dir_abs], capture_output=True, text=True)
-    #if p.returncode!=0:
-    #  raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
+    p = subprocess.run(["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-L"+build_dir_abs,"-o",hello_file_name,"-Wl,-rpath="+build_dir_abs], capture_output=True, text=True)
+    if p.returncode!=0:
+      raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
 
     s_function_name = name+"_s_function_level2"
 

@@ -22,7 +22,7 @@ mpc.subject_to(mpc.at_t0(cart_pendulum.x)==x_current)
 mpc.subject_to(mpc.at_tf(cart_pendulum.x)==x_final)
 
 # Solver
-options = {"ipopt": {"print_level": 5}}
+options = {"ipopt": {"print_level": 0}}
 options["expand"] = True
 options["print_time"] = False
 mpc.solver('ipopt',options)
@@ -36,16 +36,44 @@ mpc.method(MultipleShooting(N=50,M=1,intg='rk'))
 
 mpc.export("cart_pendulum")
 
-sol = mpc.solve()
-print("ref",sol.sample(cart_pendulum.F,grid='control'))
-
 impact = Impact("cart_pendulum")
-impact.print_problem()
+
+# Solve a single OCP (default parameters)
 impact.solve()
 
+# Get solution trajectory
+x_opt = impact.get("x_opt", impact.ALL, impact.EVERYWHERE, impact.FULL)
 
-print(impact.get("u_opt", "cart_pendulum.F", impact.EVERYWHERE, 0))
-print(impact.get("u_opt",  impact.ALL, impact.EVERYWHERE, 0))
+# Plotting
+import pylab as plt
 
-print(impact.get("u_opt", impact.ALL, 0, 0))
+_, ax = plt.subplots(2,1,sharex=True)
+ax[0].plot(x_opt.T)
+ax[0].set_title('Single OCP')
+ax[0].set_xlabel('Sample')
+
+print("Running MPC simulation loop")
+
+history = []
+for i in range(100):
+  impact.solve()
+
+  # Optimal input at k=0
+  u = impact.get("u_opt", impact.ALL, 0, impact.FULL)
+
+  # Simulate 1 step forward in time
+  # (TODO: use simulation model other than MPC model)
+  x_sim = impact.get("x_opt", impact.ALL, 1, impact.FULL)
+
+  # Update current state
+  impact.set("x_current", impact.ALL, 0, impact.FULL, x_sim)
+  history.append(x_sim)
+
+# More plotting
+ax[1].plot(np.hstack(history).T)
+ax[1].set_title('Simulated MPC')
+ax[1].set_xlabel('Sample')
+plt.show()
+
+
 
