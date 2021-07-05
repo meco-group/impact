@@ -3,6 +3,7 @@ from casadi import Function, MX, vcat, vvcat, veccat, GlobalOptions, vec
 import casadi
 import yaml
 import os
+from collections import OrderedDict
 
 
 dae_keys = {"x": "differential_states", "z": "algebraic_states", "p": "parameters", "u": "controls"}
@@ -67,12 +68,14 @@ class Structure:
       self._symbols = [definition]
       self._concat = definition
       self._numel = definition
+      self._names = [definition.name()]
     else:
       symbols = []
       for d in definition:
         size = d["size"] if "size" in d else 1
         name = d["name"]
         symbols.append(MX.sym(prefix+name, size))
+      self._names = [d["name"] for d in definition]
       self._symbols = symbols
       self._concat = vcat(symbols)
       self._numel = self._concat.numel()
@@ -101,11 +104,11 @@ class Model(DotDict):
       if not isinstance(parts,MX):
         self._update({key : s._concat},allow_keyword=True)
       self._update({'n'+key: s._numel},allow_keyword=True)
-      return s._concat
+      return s
 
 class MPC(Ocp):
-  def __init__(self,*args,**kwargs):
-    Ocp.__init__(self, *args, **kwargs)
+  def __init__(self, **kwargs):
+    Ocp.__init__(self, **kwargs)
     self.expr = Model()
 
   def parameter(self,name,*args,**kwargs):
@@ -119,53 +122,7 @@ class MPC(Ocp):
     with open(file_name) as file:
         model_meta = yaml.load(file, Loader=yaml.FullLoader)
 
-    # Read equations
-    if not "equations" in model_meta:
-      raise Exception("Model file is missing 'equations' section.")
-    assert model_meta["equations"]["type"]=="casadi_serialized"
-    model_file_name = os.path.expanduser(model_meta["equations"]["file_name"])
-    if not os.path.isabs(model_file_name):
-      model_file_name = os.path.join(os.path.dirname(file_name),model_file_name)
-    model = Function.load(model_file_name)
-    # Make sure the CasADi Function adheres to a standard
-    expected_names = dae_keys.keys()
-    unknowns = set(model.name_in()).difference(set(expected_names))
-    if unknowns:
-      raise Exception("These input names are not understood: %s. Use the following canonical names: %s." % (unknowns, expected_names))
-    
-    for i in range(model.n_in()):
-      assert model.sparsity_in(i).is_vector()
-
-    
     m = Model(name+".")
-
-    args = {}
-    nd = {}
-    # Get dimensions
-    for key, long_name in dae_keys.items():
-      rockit_name = dae_rockit[key]
-      n = model.numel_in(key) if key in model.name_in() else 0
-      nd[key] = n
-      if n:
-        if long_name in model_meta:
-          m._register(key,model_meta[long_name])
-          v = getattr(m,key)
-          assert v.numel()==n
-          register = getattr(self,"register_"+rockit_name)
-          for e in v.primitives():
-            register(e)
-        else:
-          v = getattr(self,rockit_name)(n)
-          m._register(key, v)
-        args[key] = v
-
-    res = model(**args)
-    if nd["x"]:
-      assert "ode" in res
-      self.set_der(m.x, res["ode"])
-    if nd["z"]:
-      assert "alg" in res
-      self.add_alg(res["alg"])
 
     # Define constants
     constants = {}
@@ -181,7 +138,94 @@ class MPC(Ocp):
             constants[k] = eval(v,casadi.__dict__,locals)
           except:
             constants[k] = v
+          locals[k] = constants[k]
     m._register("c", constants)
+
+    # Read equations
+    if not "equations" in model_meta:
+      raise Exception("Model file is missing 'equations' section.")
+    equations = model_meta["equations"]
+    if ("external" in equations) == ("inline" in equations):
+      raise Exception("Model equations must be either 'inline' or 'external'.")
+
+    if "external" in equations:
+      external = equations["external"]
+      assert external["type"]=="casadi_serialized"
+      model_file_name = os.path.expanduser(external["file_name"])
+      if not os.path.isabs(model_file_name):
+        model_file_name = os.path.join(os.path.dirname(file_name),model_file_name)
+      model = Function.load(model_file_name)
+      # Make sure the CasADi Function adheres to a standard
+      expected_names = dae_keys.keys()
+      unknowns = set(model.name_in()).difference(set(expected_names))
+      if unknowns:
+        raise Exception("These input names are not understood: %s. Use the following canonical names: %s." % (unknowns, expected_names))
+      
+      for i in range(model.n_in()):
+        assert model.sparsity_in(i).is_vector()
+      model_res = model(**args)
+    else:
+      # Not defined yet, defer until after variables meta-data
+      model = None
+      model_res = {}
+
+    # Read variables meta-data
+    args = {}
+    names = {}
+    nd = {}
+
+    # Loop over dae variables, e.g. key=x, long_name=differential_states
+    for key, long_name in dae_keys.items():
+      # Get corresponding rockit syntax name
+      rockit_name = dae_rockit[key]
+
+      # If we have a model already (externally defined), retrieve variable length
+      if model:
+        var_len = model.numel_in(key) if key in model.name_in() else 0
+      else:
+        var_len = 0
+      if var_len or not model:
+        if long_name in model_meta:
+          s = m._register(key,model_meta[long_name])
+          names[key] = s._names
+          locals.update(dict(zip(s._names,s._symbols)))
+          v = getattr(m,key)
+          if model:
+            assert v.numel()==var_len
+          else:
+            var_len = v.numel()
+          register = getattr(self,"register_"+rockit_name)
+          for e in v.primitives():
+            register(e)
+        else:
+          if model:
+            v = getattr(self,rockit_name)(var_len)
+            m._register(key, v)
+          else:
+            v = MX(0, 1)
+        args[key] = v
+      nd[key] = var_len
+    
+    # Parse inline equations
+    if "inline" in equations:
+      inline = equations["inline"]
+      if "ode" in inline:
+        ode = inline["ode"]
+        rhs_ordered = []
+        for local_name in names["x"]:
+          if local_name not in ode:
+            raise Exception()
+          rhs_ordered.append(eval(ode[local_name],casadi.__dict__,locals))
+        model_res["ode"] = vvcat(rhs_ordered)
+        assert len(names["x"])==len(ode)
+
+      if "alg" in inline:
+        alg = inline["alg"]
+        alg_ordered = []
+        for e in alg:
+          alg_ordered.append(eval(e,casadi.__dict__,locals))
+        model_res["alg"] = vvcat(alg_ordered)
+
 
     # Define Outputs
     outputs = {}
@@ -195,6 +239,12 @@ class MPC(Ocp):
         for k,v in model_meta["outputs"]["inline"].items():
           outputs[k] = eval(v,casadi.__dict__,locals)
     m._register("y", outputs)
+    if nd["x"]:
+      assert "ode" in model_res
+      self.set_der(m.x, model_res["ode"])
+    if nd["z"]:
+      assert "alg" in res
+      self.add_alg(model_res["alg"])
 
 
     self.expr._update({name: m})
@@ -206,9 +256,9 @@ class MPC(Ocp):
     build_dir_abs = os.path.join(os.path.abspath(dir),build_dir_rel)
     os.makedirs(build_dir_abs,exist_ok=True)
 
+    print(self.sample(self.x,grid='control'))
     [_,states] = self.sample(self.x,grid='control')
     [_,controls] = self.sample(self.u,grid='control-')
-
     parameters_symbols = self.parameters['']+self.parameters['control']
     parameters = []
     for p in self.parameters['']:
@@ -220,7 +270,7 @@ class MPC(Ocp):
 
     casadi_file_name = os.path.join(build_dir_abs,name+".casadi")
     ocpfun.save(casadi_file_name)
-    prefix = ""
+    prefix = "impact_"
 
     c_file_name = os.path.join(build_dir_abs,name+".c")
     h_file_name = os.path.join(build_dir_abs,name+".h")
@@ -238,6 +288,8 @@ class MPC(Ocp):
             printf("Failed to initialize\\n");
             return 1;
           }}
+
+
 
           int n;
 
@@ -302,96 +354,122 @@ class MPC(Ocp):
       """
       )
 
-    with open(h_file_name,"w") as out:
+    with open(hello_c_file_name,"w") as out:
       out.write(f"""
-          #define casadi_real double
-          #define casadi_int long long int
+        #include <{name}.h>
+        #include <stdio.h>
+        #include <assert.h>
 
-          #define MPC_ALL 0
-          #define MPC_EVERYWHERE -1
-          #define MPC_FULL 0
-          #define MPC_HREP 1
-          #define MPC_VREP 2
-          #define MPC_COLUMN_MAJOR 0
-          #define MPC_ROW_MAJOR 4
+        int main() {{
+          MPCstruct* m = initialize(printf);
+          if (!m) {{
+            printf("Failed to initialize\\n");
+            return 1;
+          }}
+
+          print_problem(m);
+
+          solve(m);
+
+          //set_scalar(m, "x_initial_guess", "cart_pendulum.pos", 0, 0.5, MPC_HREP);
+                                                                                                                  
+          //n = set(m, "p", "current_x", 2, t, MPC_HREP);
+
+          destroy(m);
+        }}
+      """
+      )
+    flags = OrderedDict([("ALL",0),("EVERYWHERE",-1),("FULL",0),("HREP",1),("VREP",2),("COLUMN_MAJOR",0),("ROW_MAJOR",4)])
+
+    with open(h_file_name,"w") as out:
+      for flag_name, flag_value in flags.items():
+        out.write(f"#define MPC_{flag_name} {flag_value}\n")
+
+      out.write(f"""
+#define casadi_real double
+#define casadi_int long long int
+
+typedef struct MPC_pool {{
+  casadi_int n;
+  casadi_int size;            
+  const char** names; // length n
+  const casadi_int* trajectory_length; // length n
+  const casadi_int* part_offset; // length n
+  const casadi_int* part_unit; // length n a non-full may span multiple parts
+  const casadi_int* part_stride; // length n a non-full may span multiple parts
+  casadi_real* data;
+  casadi_int stride;
+}} MPCpool;
+
+struct MPCstruct;
+typedef struct MPC_struct MPCstruct;
+
+typedef int (*formatter)(const char * s);
+typedef void (*fatal_fp)(MPCstruct* m, const char * loc, const char * fmt, ...);
+typedef void (*info_fp)(MPCstruct* m, const char * fmt, ...);
+
+typedef struct MPC_struct {{
+  int id;
+  int pop; // need to pop when destroyed?
+  casadi_int n_in;
+  casadi_int n_out;
+
+  casadi_int sz_arg;
+  casadi_int sz_res;
+  casadi_int sz_iw;
+  casadi_int sz_w;
+
+  const casadi_real** arg;
+  casadi_real** res;
+  casadi_int* iw;
+  casadi_real* w;
+
+  const casadi_real** arg_casadi;
+  casadi_real** res_casadi;
+  casadi_int* iw_casadi;
+  casadi_real* w_casadi;
+
+  MPCpool* x_current;
+
+  MPCpool* u_initial_guess;
+  MPCpool* x_initial_guess;
+  MPCpool* p;
+
+  MPCpool* u_opt;
+  MPCpool* x_opt;
+
+  int mem;
+
+  formatter fp;
+  fatal_fp fatal;
+  info_fp info;
+}} MPCstruct;
+
+MPCstruct* {prefix}initialize();
+void {prefix}destroy(MPCstruct* m);
+
+int {prefix}solve(MPCstruct* m);
+
+/*
+*   
+*/
+
+int {prefix}get(MPCstruct* m, const char* pool_name, const char* id, int stage, double* dst, int dst_flags);
+int {prefix}set(MPCstruct* m, const char* pool_name, const char* id, int stage, const double* src, int src_flags);
 
 
-          typedef struct MPC_pool {{
-            casadi_int n;
-            casadi_int size;            
-            const char** names; // length n
-            const casadi_int* trajectory_length; // length n
-            const casadi_int* part_offset; // length n
-            const casadi_int* part_unit; // length n a non-full may span multiple parts
-            const casadi_int* part_stride; // length n a non-full may span multiple parts
-            casadi_real* data;
-            casadi_int stride;
-          }} MPCpool;
+int {prefix}get_id_count(MPCstruct* m, const char* pool_name);
+int {prefix}get_id_from_index(MPCstruct* m, const char* pool_name, int index, const char** id);
+int {prefix}get_size(MPCstruct* m, const char* pool_name, const char* id, int* n_row, int* n_col);
+int {prefix}print_problem(MPCstruct* m);    
 
-          struct MPCstruct;
-          typedef struct MPC_struct MPCstruct;
+int {prefix}allocate(MPCstruct* m);
+void {prefix}set_work(MPCstruct* m, const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w);
+void {prefix}work(MPCstruct* m, casadi_int* sz_arg, casadi_int* sz_res, casadi_int* sz_iw, casadi_int* sz_w);
 
-          typedef int (*formatter)(const char * s);
-          typedef void (*fatal_fp)(MPCstruct* m, const char * loc, const char * fmt, ...);
-          typedef void (*info_fp)(MPCstruct* m, const char * fmt, ...);
-
-          typedef struct MPC_struct {{
-            int id;
-            casadi_int n_in;
-            casadi_int n_out;
-
-            casadi_int sz_arg;
-            casadi_int sz_res;
-            casadi_int sz_iw;
-            casadi_int sz_w;
-
-            const casadi_real** arg;
-            casadi_real** res;
-            casadi_int* iw;
-            casadi_real* w;
-
-            const casadi_real** arg_casadi;
-            casadi_real** res_casadi;
-            casadi_int* iw_casadi;
-            casadi_real* w_casadi;
-
-            MPCpool* x_current;
-
-            MPCpool* u_initial_guess;
-            MPCpool* x_initial_guess;
-            MPCpool* p;
-
-            MPCpool* u_opt;
-            MPCpool* x_opt;
-
-            int mem;
-
-            formatter fp;
-            fatal_fp fatal;
-            info_fp info;
-          }} MPCstruct;
-
-          MPCstruct* {prefix}initialize();
-          void {prefix}destroy(MPCstruct* m);
-
-          int {prefix}solve(MPCstruct* m);
-
-          /*
-          *   
-          */
-
-          int {prefix}get(MPCstruct* m, const char* pool_name, const char* id, int stage, double* dst, int dst_flags);
-          int {prefix}set(MPCstruct* m, const char* pool_name, const char* id, int stage, const double* src, int src_flags);
-
-
-          int {prefix}get_id_count(MPCstruct* m, const char* pool_name);
-          int {prefix}get_id_from_index(MPCstruct* m, const char* pool_name, int index, const char** id);
-          int {prefix}get_size(MPCstruct* m, const char* pool_name, const char* id, int* n_row, int* n_col);
-
-          int {prefix}print_problem(MPCstruct* m);
-          void {prefix}set_work(MPCstruct* m, const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w);
-          void {prefix}work(MPCstruct* m, casadi_int* sz_arg, casadi_int* sz_res, casadi_int* sz_iw, casadi_int* sz_w);
-
+int {prefix}flag_size(MPCstruct* m);
+const char* {prefix}flag_name(MPCstruct* m, int index);
+int {prefix}flag_value(MPCstruct* m, int index);
 
       """
       )
@@ -489,6 +567,20 @@ class MPC(Ocp):
           static const char* {prefix}pool_names[4] = {{"x_current","x_initial_guess","u_initial_guess","p"}};
 
 
+          static const char* {prefix}flag_names[{len(flags)}] = {{ {",".join('"%s"' % e for e in flags.keys())} }};
+          static int {prefix}flag_values[{len(flags)}] = {{ {",".join("MPC_" + e for e in flags.keys())} }};
+
+          int {prefix}flag_size(MPCstruct* m) {{
+            return {len(flags)};
+          }}
+          const char* {prefix}flag_name(MPCstruct* m, int index) {{
+            if (index<0 || index>={len(flags)}) return 0;
+            return {prefix}flag_names[index];
+          }}
+          int {prefix}flag_value(MPCstruct* m, int index) {{
+            if (index<0 || index>={len(flags)}) return 0;
+            return {prefix}flag_values[index];
+          }}
 
 
 
@@ -525,19 +617,27 @@ class MPC(Ocp):
             m->fp = fp;
             m->fatal = {prefix}fatal;
             m->info = {prefix}info;
-            flag = casadi_c_push_file("{casadi_file_name}");
-            if (flag) {{
-              m->fatal(m, "initialize", "Could not load file '{casadi_file_name}'.\\n");
-              return 0;
+            m->id = -1;
+            if (casadi_c_n_loaded()) {{ 
+              m->id = casadi_c_id("{casadi_fun_name}");
+              m->pop = 0;
+            }}
+            if (m->id<0) {{
+              flag = casadi_c_push_file("{casadi_file_name}");
+              m->pop = 1;
+              if (flag) {{
+                m->fatal(m, "initialize", "Could not load file '{casadi_file_name}'.\\n");
+                return 0;
+              }}
+              m->id = casadi_c_id("{casadi_fun_name}");
+              if (m->id<0) {{
+                m->fatal(m, "initialize", "Could not locate function with name '{casadi_fun_name}'.\\n");
+                {prefix}destroy(m);
+                return 0;
+              }}
             }}
 
-            m->id = casadi_c_id("{casadi_fun_name}");
-            m->info(m, "test %d\\n", m->id);
-            if (m->id<0) {{
-              m->fatal(m, "initialize", "Could not locate function with name '{casadi_fun_name}'.\\n");
-              {prefix}destroy(m);
-              return 0;
-            }}
+            m->info(m, "initialize ready %d", m->id);
 
             // Allocate memory (thread-safe)
             casadi_c_incref_id(m->id);
@@ -632,17 +732,17 @@ class MPC(Ocp):
             memcpy(m->p->data, {prefix}p_nominal, {p_nominal.size}*sizeof(casadi_real));
             memcpy(m->x_initial_guess->data, {prefix}x_nominal, {x_nominal.size}*sizeof(casadi_real));
             memcpy(m->u_initial_guess->data, {prefix}u_nominal, {u_nominal.size}*sizeof(casadi_real));
-            memcpy(m->x_current->data, {prefix}x_current_nominal, {self.nx}*sizeof(casadi_real));
             return m;
           }}
 
           void {prefix}destroy(MPCstruct* m) {{
+            m->info(m, "destroy\\n");
                         // Allocate memory (thread-safe)
             /* Free memory (thread-safe) */
             casadi_c_decref_id(m->id);
             // Release thread-local (not thread-safe)
             casadi_c_release_id(m->id, m->mem);
-            casadi_c_pop();
+            if (m->pop) casadi_c_clear();
             free(m);
           }}
 
@@ -844,7 +944,7 @@ class MPC(Ocp):
             const MPCpool* p;
             max_len=0;
             for (l=0;l<4;++l) {{
-              p = get_pool_by_name(m, {prefix}pool_names[l]);
+              p = {prefix}get_pool_by_name(m, {prefix}pool_names[l]);
               for (i=0;i<p->n;++i) {{
                 max_len = strlen(p->names[i])>max_len? strlen(p->names[i]) : max_len;
               }}
@@ -852,7 +952,7 @@ class MPC(Ocp):
 
             if (m->fp) {{
               for (l=0;l<4;++l) {{
-                const MPCpool* p = get_pool_by_name(m, {prefix}pool_names[l]);
+                const MPCpool* p = {prefix}get_pool_by_name(m, {prefix}pool_names[l]);
                 m->info(m, "=== %s ===\\n", {prefix}pool_names[l]);
                 char formatbuffer[10];
                 sprintf(formatbuffer, "%%-%ds", max_len);
@@ -866,7 +966,7 @@ class MPC(Ocp):
                         m->info(m, " ");
                     }}
                     for (k=0;k<p->trajectory_length[i];++k) {{
-                      m->info(m, " %.4e", p->data[j+ p->part_offset[i] + p->part_stride[i]*k]);
+                      m->info(m, " %.4e (%d)", p->data[j+ p->part_offset[i] + p->part_stride[i]*k], j+ p->part_offset[i] + p->part_stride[i]*k);
                     }}
                     m->info(m, "\\n");
                   }}
@@ -901,10 +1001,13 @@ class MPC(Ocp):
     lib_file_name = os.path.join(build_dir_abs,"lib" + lib_name + ".so")
 
     import subprocess
-    subprocess.Popen(["gcc","-g","-fPIC","-shared",c_file_name,"-lcasadi","-L"+GlobalOptions.getCasadiPath(),"-I"+GlobalOptions.getCasadiIncludePath(),"-o"+lib_file_name,"-Wl,-rpath="+GlobalOptions.getCasadiPath()]).wait()
-    args = ["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-L"+build_dir_abs,"-o",hello_file_name,"-Wl,-rpath="+build_dir_abs]
-    print(" ".join(args))
-    subprocess.Popen(args).wait()
+    p = subprocess.run(["gcc","-g","-fPIC","-shared",c_file_name,"-lcasadi","-L"+GlobalOptions.getCasadiPath(),"-I"+GlobalOptions.getCasadiIncludePath(),"-o"+lib_file_name,"-Wl,-rpath="+GlobalOptions.getCasadiPath()], capture_output=True, text=True)
+    if p.returncode!=0:
+      raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
+    # breaks matlab
+    #p = subprocess.run(["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-L"+build_dir_abs,"-o",hello_file_name,"-Wl,-rpath="+build_dir_abs], capture_output=True, text=True)
+    #if p.returncode!=0:
+    #  raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
 
     s_function_name = name+"_s_function_level2"
 
@@ -1059,5 +1162,16 @@ class MPC(Ocp):
       
     with open(m_build_file_name,"w") as out:
       out.write(f"""
-        mex('-v','-g',['-I{build_dir_abs}'],['-L{build_dir_abs}'],'-l{name}','CFLAGS="\$CFLAGS -Wl,-rpath,{build_dir_abs}"', '{s_function_file_name}')
+        mex('-v','-g',['-I{build_dir_abs}'],['-L{build_dir_abs}'],'-l{name}','LDFLAGS="\$LDFLAGS -Wl,-rpath,{build_dir_abs}"', '{s_function_file_name}')
        """)
+
+    py_file_name = os.path.join(build_dir_abs,name+".py")
+      
+    with open(py_file_name,"w") as out:
+      out.write(f"""
+
+      class Impact:
+        
+
+
+      """)
