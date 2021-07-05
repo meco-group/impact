@@ -38,7 +38,7 @@ mpc.export("cart_pendulum")
 
 impact = Impact("cart_pendulum")
 
-# Solve a single OCP (default parameters)
+print("Solve a single OCP (default parameters)")
 impact.solve()
 
 # Get solution trajectory

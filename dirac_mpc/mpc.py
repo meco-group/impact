@@ -255,8 +255,6 @@ class MPC(Ocp):
     build_dir_rel = name+"_build_dir"
     build_dir_abs = os.path.join(os.path.abspath(dir),build_dir_rel)
     os.makedirs(build_dir_abs,exist_ok=True)
-
-    print(self.sample(self.x,grid='control'))
     [_,states] = self.sample(self.x,grid='control')
     [_,controls] = self.sample(self.u,grid='control-')
     parameters_symbols = self.parameters['']+self.parameters['control']
@@ -283,7 +281,7 @@ class MPC(Ocp):
         #include <assert.h>
 
         int main() {{
-          IMPACT_struct* m = initialize(printf);
+          {prefix}struct* m = initialize(printf);
           if (!m) {{
             printf("Failed to initialize\\n");
             return 1;
@@ -363,7 +361,7 @@ class MPC(Ocp):
         int main() {{
           int i, j, n_row, n_col;
           double *u_scratch, *x_scratch;
-          IMPACT_struct* m = impact_initialize(printf);
+          {prefix}struct* m = impact_initialize(printf);
           if (!m) {{
             printf("Failed to initialize\\n");
             return 1;
@@ -426,7 +424,7 @@ class MPC(Ocp):
 #define casadi_real double
 #define casadi_int long long int
 
-typedef struct IMPACT_pool {{
+typedef struct {prefix}_pool {{
   casadi_int n;
   casadi_int size;            
   const char** names; // length n
@@ -436,16 +434,16 @@ typedef struct IMPACT_pool {{
   const casadi_int* part_stride; // length n a non-full may span multiple parts
   casadi_real* data;
   casadi_int stride;
-}} MPCpool;
+}} {prefix}pool;
 
-struct IMPACT_struct;
-typedef struct IMPACTstruct IMPACT_struct;
+struct {prefix}struct;
+typedef struct {prefix}_struct {prefix}struct;
 
 typedef int (*formatter)(const char * s);
-typedef void (*fatal_fp)(IMPACT_struct* m, const char * loc, const char * fmt, ...);
-typedef void (*info_fp)(IMPACT_struct* m, const char * fmt, ...);
+typedef void (*fatal_fp)({prefix}struct* m, const char * loc, const char * fmt, ...);
+typedef void (*info_fp)({prefix}struct* m, const char * fmt, ...);
 
-typedef struct IMPACTstruct {{
+typedef struct {prefix}_struct {{
   int id;
   int pop; // need to pop when destroyed?
   casadi_int n_in;
@@ -466,47 +464,47 @@ typedef struct IMPACTstruct {{
   casadi_int* iw_casadi;
   casadi_real* w_casadi;
 
-  MPCpool* x_current;
+  {prefix}pool* x_current;
 
-  MPCpool* u_initial_guess;
-  MPCpool* x_initial_guess;
-  MPCpool* p;
+  {prefix}pool* u_initial_guess;
+  {prefix}pool* x_initial_guess;
+  {prefix}pool* p;
 
-  MPCpool* u_opt;
-  MPCpool* x_opt;
+  {prefix}pool* u_opt;
+  {prefix}pool* x_opt;
 
   int mem;
 
   formatter fp;
   fatal_fp fatal;
   info_fp info;
-}} IMPACT_struct;
+}} {prefix}struct;
 
-IMPACT_struct* {prefix}initialize();
-void {prefix}destroy(IMPACT_struct* m);
+{prefix}struct* {prefix}initialize();
+void {prefix}destroy({prefix}struct* m);
 
-int {prefix}solve(IMPACT_struct* m);
+int {prefix}solve({prefix}struct* m);
 
 /*
 *   
 */
 
-int {prefix}get(IMPACT_struct* m, const char* pool_name, const char* id, int stage, double* dst, int dst_flags);
-int {prefix}set(IMPACT_struct* m, const char* pool_name, const char* id, int stage, const double* src, int src_flags);
+int {prefix}get({prefix}struct* m, const char* pool_name, const char* id, int stage, double* dst, int dst_flags);
+int {prefix}set({prefix}struct* m, const char* pool_name, const char* id, int stage, const double* src, int src_flags);
 
 
-int {prefix}get_id_count(IMPACT_struct* m, const char* pool_name);
-int {prefix}get_id_from_index(IMPACT_struct* m, const char* pool_name, int index, const char** id);
-int {prefix}get_size(IMPACT_struct* m, const char* pool_name, const char* id, int stage, int flags, int* n_row, int* n_col);
-int {prefix}print_problem(IMPACT_struct* m);    
+int {prefix}get_id_count({prefix}struct* m, const char* pool_name);
+int {prefix}get_id_from_index({prefix}struct* m, const char* pool_name, int index, const char** id);
+int {prefix}get_size({prefix}struct* m, const char* pool_name, const char* id, int stage, int flags, int* n_row, int* n_col);
+int {prefix}print_problem({prefix}struct* m);    
 
-int {prefix}allocate(IMPACT_struct* m);
-void {prefix}set_work(IMPACT_struct* m, const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w);
-void {prefix}work(IMPACT_struct* m, casadi_int* sz_arg, casadi_int* sz_res, casadi_int* sz_iw, casadi_int* sz_w);
+int {prefix}allocate({prefix}struct* m);
+void {prefix}set_work({prefix}struct* m, const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w);
+void {prefix}work({prefix}struct* m, casadi_int* sz_arg, casadi_int* sz_res, casadi_int* sz_iw, casadi_int* sz_w);
 
-int {prefix}flag_size(IMPACT_struct* m);
-const char* {prefix}flag_name(IMPACT_struct* m, int index);
-int {prefix}flag_value(IMPACT_struct* m, int index);
+int {prefix}flag_size({prefix}struct* m);
+const char* {prefix}flag_name({prefix}struct* m, int index);
+int {prefix}flag_value({prefix}struct* m, int index);
 
       """
       )
@@ -607,21 +605,21 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
           static const char* {prefix}flag_names[{len(flags)}] = {{ {",".join('"%s"' % e for e in flags.keys())} }};
           static int {prefix}flag_values[{len(flags)}] = {{ {",".join("IMPACT_" + e for e in flags.keys())} }};
 
-          int {prefix}flag_size(IMPACT_struct* m) {{
+          int {prefix}flag_size({prefix}struct* m) {{
             return {len(flags)};
           }}
-          const char* {prefix}flag_name(IMPACT_struct* m, int index) {{
+          const char* {prefix}flag_name({prefix}struct* m, int index) {{
             if (index<0 || index>={len(flags)}) return 0;
             return {prefix}flag_names[index];
           }}
-          int {prefix}flag_value(IMPACT_struct* m, int index) {{
+          int {prefix}flag_value({prefix}struct* m, int index) {{
             if (index<0 || index>={len(flags)}) return 0;
             return {prefix}flag_values[index];
           }}
 
 
 
-          void {prefix}fatal(IMPACT_struct* m, const char* loc, const char* fmt, ...) {{
+          void {prefix}fatal({prefix}struct* m, const char* loc, const char* fmt, ...) {{
             va_list args;
             char buffer[1024];
             if (m->fp) {{
@@ -635,7 +633,7 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
               va_end(args);
             }}
           }}
-          void {prefix}info(IMPACT_struct* m, const char* fmt, ...) {{
+          void {prefix}info({prefix}struct* m, const char* fmt, ...) {{
             va_list args;
             char buffer[1024];
             if (m->fp) {{
@@ -647,10 +645,10 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
           }}
 
 
-          IMPACT_struct* {prefix}initialize(formatter fp) {{
+          {prefix}struct* {prefix}initialize(formatter fp) {{
             int flag;
-            IMPACT_struct* m;
-            m = malloc(sizeof(IMPACT_struct));
+            {prefix}struct* m;
+            m = malloc(sizeof({prefix}struct));
             m->fp = fp;
             m->fatal = {prefix}fatal;
             m->info = {prefix}info;
@@ -698,7 +696,7 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
             casadi_real* w = m->w;
             m->w_casadi = w;
 
-            m->p = malloc(sizeof(MPCpool));
+            m->p = malloc(sizeof({prefix}pool));
             m->p->names = {prefix}p_names;
             m->p->size = {p_nominal.size};
             m->p->data = malloc(sizeof(casadi_real)*{p_nominal.size});
@@ -709,7 +707,7 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
             m->p->part_unit = {prefix}p_part_unit;
             m->p->part_stride = {prefix}p_part_stride;
 
-            m->x_current = malloc(sizeof(MPCpool));
+            m->x_current = malloc(sizeof({prefix}pool));
             m->x_current->names = {prefix}x_names;
             m->x_current->size = {self.nx};
             m->x_current->data = m->p->data+m->p->part_offset[{i_x_current}];
@@ -720,7 +718,7 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
             m->x_current->part_unit = {prefix}x_part_unit;
             m->x_current->part_stride = {prefix}x_part_stride;
 
-            m->u_initial_guess = malloc(sizeof(MPCpool));
+            m->u_initial_guess = malloc(sizeof({prefix}pool));
             m->u_initial_guess->names = {prefix}u_names;
             m->u_initial_guess->size = {u_nominal.size};
             m->u_initial_guess->data = malloc(sizeof(casadi_real)*{u_nominal.size});
@@ -731,7 +729,7 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
             m->u_initial_guess->part_unit = {prefix}u_part_unit;
             m->u_initial_guess->part_stride = {prefix}u_part_stride;
 
-            m->x_initial_guess = malloc(sizeof(MPCpool));
+            m->x_initial_guess = malloc(sizeof({prefix}pool));
             m->x_initial_guess->names = {prefix}x_names;
             m->x_initial_guess->size = {x_nominal.size};
             m->x_initial_guess->data = malloc(sizeof(casadi_real)*{x_nominal.size});
@@ -742,7 +740,7 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
             m->x_initial_guess->part_unit = {prefix}x_part_unit;
             m->x_initial_guess->part_stride = {prefix}x_part_stride;
 
-            m->u_opt = malloc(sizeof(MPCpool));
+            m->u_opt = malloc(sizeof({prefix}pool));
             m->u_opt->names = {prefix}u_names;
             m->u_opt->size = {u_nominal.size};
             m->u_opt->data = malloc(sizeof(casadi_real)*{u_nominal.size});
@@ -753,7 +751,7 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
             m->u_opt->part_unit = {prefix}u_part_unit;
             m->u_opt->part_stride = {prefix}u_part_stride;
 
-            m->x_opt = malloc(sizeof(MPCpool));
+            m->x_opt = malloc(sizeof({prefix}pool));
             m->x_opt->names = {prefix}x_names;
             m->x_opt->size = {x_nominal.size};
             m->x_opt->data = malloc(sizeof(casadi_real)*{x_nominal.size});
@@ -770,7 +768,7 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
             return m;
           }}
 
-          void {prefix}destroy(IMPACT_struct* m) {{
+          void {prefix}destroy({prefix}struct* m) {{
             /* Free memory (thread-safe) */
             casadi_c_decref_id(m->id);
             // Release thread-local (not thread-safe)
@@ -779,23 +777,23 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
             free(m);
           }}
 
-          void {prefix}set_work(IMPACT_struct* m, const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w) {{
+          void {prefix}set_work({prefix}struct* m, const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w) {{
             m->arg = arg;
             m->res = res;
             m->iw = iw;
             m->w = w;
           }}
 
-          void {prefix}work(IMPACT_struct* m, casadi_int* sz_arg, casadi_int* sz_res, casadi_int* sz_iw, casadi_int* sz_w) {{
+          void {prefix}work({prefix}struct* m, casadi_int* sz_arg, casadi_int* sz_res, casadi_int* sz_iw, casadi_int* sz_w) {{
             casadi_c_work_id(m->id, sz_arg, sz_res, sz_iw, sz_w);
             // We might want to be adding other working memory here
           }}
 
-          int {prefix}nx(IMPACT_struct* m) {{
+          int {prefix}nx({prefix}struct* m) {{
 
           }}
 
-          const MPCpool* {prefix}get_pool_by_name(IMPACT_struct* m, const char* name) {{
+          const {prefix}pool* {prefix}get_pool_by_name({prefix}struct* m, const char* name) {{
             if (!strcmp(name,"p")) {{
               return m->p;
             }} else if (!strcmp(name,"x_current")) {{
@@ -816,8 +814,8 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
           }}
 
 
-          int {prefix}get_id_count(IMPACT_struct* m, const char* pool) {{
-            const MPCpool* p;
+          int {prefix}get_id_count({prefix}struct* m, const char* pool) {{
+            const {prefix}pool* p;
             if (!pool) {{
               m->fatal(m, "get_id_count (ret code -1)", "You may not pass a null pointer as pool. \\n");
               return -1;
@@ -830,9 +828,9 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
             return p->n;
           }}
 
-          int {prefix}get_id_from_index(IMPACT_struct* m, const char* pool, int index, const char** id) {{
+          int {prefix}get_id_from_index({prefix}struct* m, const char* pool, int index, const char** id) {{
             int i;
-            const MPCpool* p;
+            const {prefix}pool* p;
             if (!pool) {{
               m->fatal(m, "get_id_from_index (ret code -1)", "You may not pass a null pointer as pool. \\n");
               return -1;
@@ -852,9 +850,9 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
           }}
 
 
-          int {prefix}get_size(IMPACT_struct* m, const char* pool, const char* id, int stage, int flags, int* n_row, int* n_col) {{
+          int {prefix}get_size({prefix}struct* m, const char* pool, const char* id, int stage, int flags, int* n_row, int* n_col) {{
             int index, i;
-            const MPCpool* p;
+            const {prefix}pool* p;
             if (!pool) {{
               m->fatal(m, "get_size (ret code -1)", "You may not pass a null pointer as pool. \\n");
               return -1;
@@ -894,9 +892,9 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
             return 0;
           }}
 
-          int {prefix}set_get(IMPACT_struct* m, const char* pool, const char* id, int stage, double* data, int data_flags, char mode) {{
+          int {prefix}set_get({prefix}struct* m, const char* pool, const char* id, int stage, double* data, int data_flags, char mode) {{
             int i, j, k, index, i_start, i_stop, k_start, k_stop, offset, row, col, stride, data_i;
-            const MPCpool* p;
+            const {prefix}pool* p;
             if (!pool) {{
               m->fatal(m, "set_get (ret code -1)", "You may not pass a null pointer as pool. \\n");
               return -1;
@@ -956,27 +954,27 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
             return data_i+1;
           }}
 
-          int {prefix}set(IMPACT_struct* m, const char* pool, const char* id, int stage, const double* src, int src_flags) {{
+          int {prefix}set({prefix}struct* m, const char* pool, const char* id, int stage, const double* src, int src_flags) {{
             return {prefix}set_get(m, pool, id, stage, (double*) src, src_flags, 0);
           }}
 
-          int {prefix}get(IMPACT_struct* m, const char* pool, const char* id, int stage, double* dst, int dst_flags) {{
+          int {prefix}get({prefix}struct* m, const char* pool, const char* id, int stage, double* dst, int dst_flags) {{
             return {prefix}set_get(m, pool, id, stage, dst, dst_flags, 1);
           }}
 
-          int {prefix}get_pool(const MPCpool* p, casadi_real* value) {{
+          int {prefix}get_pool(const {prefix}pool* p, casadi_real* value) {{
             if (!value) return 1;
             memcpy(value, p->data, p->size*sizeof(casadi_real));
             return 0;
           }}
 
-          int {prefix}nu(IMPACT_struct* m) {{
+          int {prefix}nu({prefix}struct* m) {{
 
           }}
 
-          int {prefix}print_problem(IMPACT_struct* m) {{
+          int {prefix}print_problem({prefix}struct* m) {{
             int i,j,k,l,max_len;
-            const MPCpool* p;
+            const {prefix}pool* p;
             max_len=0;
             for (l=0;l<4;++l) {{
               p = {prefix}get_pool_by_name(m, {prefix}pool_names[l]);
@@ -987,7 +985,7 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
 
             if (m->fp) {{
               for (l=0;l<4;++l) {{
-                const MPCpool* p = {prefix}get_pool_by_name(m, {prefix}pool_names[l]);
+                const {prefix}pool* p = {prefix}get_pool_by_name(m, {prefix}pool_names[l]);
                 m->info(m, "=== %s ===\\n", {prefix}pool_names[l]);
                 char formatbuffer[10];
                 sprintf(formatbuffer, "%%-%ds", max_len);
@@ -1010,7 +1008,7 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
             }}
           }}
 
-          int {prefix}solve(IMPACT_struct* m) {{
+          int {prefix}solve({prefix}struct* m) {{
             int i;
             m->arg_casadi[0] = m->x_initial_guess->data;
             m->arg_casadi[1] = m->u_initial_guess->data;
@@ -1022,11 +1020,11 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
             return casadi_c_eval_id(m->id, m->arg_casadi, m->res_casadi, m->iw_casadi, m->w_casadi, m->mem);
           }}
 
-          int {prefix}get_p_by_id(IMPACT_struct* m, const char* id, const casadi_real* value) {{
+          int {prefix}get_p_by_id({prefix}struct* m, const char* id, const casadi_real* value) {{
 
           }}
 
-          void {prefix}get_u(IMPACT_struct* m, double* value) {{
+          void {prefix}get_u({prefix}struct* m, double* value) {{
 
           }}
 
@@ -1057,7 +1055,7 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
 
         #include "simstruc.h"
 
-        IMPACT_struct* m;
+        {prefix}struct* m;
         struct {{
           int sz_arg;
           int n_p;
@@ -1080,7 +1078,7 @@ int {prefix}flag_value(IMPACT_struct* m, int index);
             cleanup();
 
 
-            IMPACT_struct* m = initialize(mexPrintf);
+            {prefix}struct* m = initialize(mexPrintf);
 
             if (!m) {{
               cleanup();
