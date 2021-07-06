@@ -4,7 +4,9 @@ import casadi
 import yaml
 import os
 from collections import OrderedDict
-
+import shutil
+from zipfile import ZipFile 
+from lxml import etree
 
 dae_keys = {"x": "differential_states", "z": "algebraic_states", "p": "parameters", "u": "controls"}
 dae_rockit = {"x": "state", "z": "algebraic", "p": "parameter", "u": "control"}
@@ -110,6 +112,7 @@ class MPC(Ocp):
   def __init__(self, **kwargs):
     Ocp.__init__(self, **kwargs)
     self.expr = Model()
+    self.basename = os.path.dirname(__file__)
 
   def parameter(self,name,*args,**kwargs):
     p = MX.sym(name,*args)
@@ -254,7 +257,20 @@ class MPC(Ocp):
   def export(self,name,dir="."):
     build_dir_rel = name+"_build_dir"
     build_dir_abs = os.path.join(os.path.abspath(dir),build_dir_rel)
+
     os.makedirs(build_dir_abs,exist_ok=True)
+    # Clean directory (but do not delete it,
+    # since this confuses open shells in Linux (e.g. bash, Matlab)
+    for filename in os.listdir(build_dir_abs):
+      file_path = os.path.join(build_dir_abs, filename)
+      try:
+        if os.path.isfile(file_path) or os.path.islink(file_path):
+          os.unlink(file_path)
+        elif os.path.isdir(file_path):
+          shutil.rmtree(file_path)
+      except:
+        pass
+          
     [_,states] = self.sample(self.x,grid='control')
     [_,controls] = self.sample(self.u,grid='control-')
     parameters_symbols = self.parameters['']+self.parameters['control']
@@ -334,7 +350,7 @@ class MPC(Ocp):
 
           int n_row;
           int n_col;
-          get_size(m, "u_opt", IMPACT_ALL, &n_row, &n_col);
+          {prefix}get_size(m, "u_opt", IMPACT_ALL, &n_row, &n_col);
           printf("dims %d %d\\n",n_row,n_col);
 
           casadi_int sz_arg, sz_res, sz_iw, sz_w;
@@ -356,6 +372,7 @@ class MPC(Ocp):
       out.write(f"""
         #include <{name}.h>
         #include <stdio.h>
+        #include <stdlib.h>
         #include <assert.h>
 
         int main() {{
@@ -427,11 +444,11 @@ class MPC(Ocp):
 typedef struct {prefix}_pool {{
   casadi_int n;
   casadi_int size;            
-  const char** names; // length n
-  const casadi_int* trajectory_length; // length n
-  const casadi_int* part_offset; // length n
-  const casadi_int* part_unit; // length n a non-full may span multiple parts
-  const casadi_int* part_stride; // length n a non-full may span multiple parts
+  const char** names; /* length n */
+  const casadi_int* trajectory_length;  /*  length n */
+  const casadi_int* part_offset;  /*  length n */
+  const casadi_int* part_unit;  /*  length n a non-full may span multiple parts */
+  const casadi_int* part_stride;  /*  length n a non-full may span multiple parts */
   casadi_real* data;
   casadi_int stride;
 }} {prefix}pool;
@@ -445,7 +462,7 @@ typedef void (*info_fp)({prefix}struct* m, const char * fmt, ...);
 
 typedef struct {prefix}_struct {{
   int id;
-  int pop; // need to pop when destroyed?
+  int pop; /*  need to pop when destroyed? */
   casadi_int n_in;
   casadi_int n_out;
 
@@ -599,7 +616,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
           static const casadi_real {prefix}x_nominal[{x_nominal.size}] = {{ {",".join("%0.16f" % e for e in x_nominal)} }};
           static const casadi_real {prefix}x_current_nominal[{x_current_nominal.size}] = {{ {",".join("%0.16f" % e for e in x_current_nominal)} }};
 
-          static const char* {prefix}pool_names[4] = {{"x_current","x_initial_guess","u_initial_guess","p"}};
+          static const char* {prefix}pool_names[5] = {{"x_initial_guess","u_initial_guess","p","x_opt","u_opt"}};
 
 
           static const char* {prefix}flag_names[{len(flags)}] = {{ {",".join('"%s"' % e for e in flags.keys())} }};
@@ -647,6 +664,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
           {prefix}struct* {prefix}initialize(formatter fp) {{
             int flag;
+            int i;
             {prefix}struct* m;
             m = malloc(sizeof({prefix}struct));
             m->fp = fp;
@@ -672,9 +690,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
               }}
             }}
 
-            // Allocate memory (thread-safe)
+            /* Allocate memory (thread-safe) */
             casadi_c_incref_id(m->id);
-            // Checkout thread-local memory (not thread-safe)
+            /* Checkout thread-local memory (not thread-safe) */
             m->mem = casadi_c_checkout_id(m->id);
 
             {prefix}work(m, &m->sz_arg, &m->sz_res, &m->sz_iw, &m->sz_w);
@@ -765,6 +783,12 @@ int {prefix}flag_value({prefix}struct* m, int index);
             memcpy(m->p->data, {prefix}p_nominal, {p_nominal.size}*sizeof(casadi_real));
             memcpy(m->x_initial_guess->data, {prefix}x_nominal, {x_nominal.size}*sizeof(casadi_real));
             memcpy(m->u_initial_guess->data, {prefix}u_nominal, {u_nominal.size}*sizeof(casadi_real));
+            for (i=0;i<{x_nominal.size};++i) {{
+              m->x_opt->data[i] = 0;
+            }}
+            for (i=0;i<{u_nominal.size};++i) {{
+              m->u_opt->data[i] = 0;
+            }}
             return m;
           }}
 
@@ -945,7 +969,8 @@ int {prefix}flag_value({prefix}struct* m, int index);
                   if (mode) {{
                     data[data_i] = p->data[j+ p->part_offset[i] + p->part_stride[i]*k];
                   }} else {{
-                    p->data[j+ p->part_offset[i] + p->part_stride[i]*k] = data[data_i];
+                    /* skip nan */
+                    if (data[data_i]==data[data_i]) p->data[j+ p->part_offset[i] + p->part_stride[i]*k] = data[data_i];
                   }}
                 }}
                 row++;
@@ -976,7 +1001,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
             int i,j,k,l,max_len;
             const {prefix}pool* p;
             max_len=0;
-            for (l=0;l<4;++l) {{
+            for (l=0;l<5;++l) {{
               p = {prefix}get_pool_by_name(m, {prefix}pool_names[l]);
               for (i=0;i<p->n;++i) {{
                 max_len = strlen(p->names[i])>max_len? strlen(p->names[i]) : max_len;
@@ -984,7 +1009,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
             }}
 
             if (m->fp) {{
-              for (l=0;l<4;++l) {{
+              for (l=0;l<5;++l) {{
                 const {prefix}pool* p = {prefix}get_pool_by_name(m, {prefix}pool_names[l]);
                 m->info(m, "=== %s ===\\n", {prefix}pool_names[l]);
                 char formatbuffer[10];
@@ -1038,9 +1063,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
     if p.returncode!=0:
       raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
     # breaks matlab
-    p = subprocess.run(["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-L"+build_dir_abs,"-o",hello_file_name,"-Wl,-rpath="+build_dir_abs], capture_output=True, text=True)
-    if p.returncode!=0:
-      raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
+    #p = subprocess.run(["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-L"+build_dir_abs,"-o",hello_file_name,"-Wl,-rpath="+build_dir_abs], capture_output=True, text=True)
+    #if p.returncode!=0:
+    #  raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
 
     s_function_name = name+"_s_function_level2"
 
@@ -1055,7 +1080,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
         #include "simstruc.h"
 
-        {prefix}struct* m;
+        static {prefix}struct* m;
         struct {{
           int sz_arg;
           int n_p;
@@ -1063,60 +1088,68 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
         void cleanup() {{
           if (m) {{
-            destroy(m);
+            {prefix}destroy(m);
           }}
         }}
 
         static void mdlInitializeSizes(SimStruct *S) {{
+            mexPrintf("mdlInitializeSizes\\n");
             int i;
             int n_row, n_col;
             const char* id;
             casadi_int sz_arg, sz_res, sz_iw, sz_w;
             m = 0;
 
-            // Simulink does not provide a cleanup-hook when parameters are changed
+            /* Simulink does not provide a cleanup-hook when parameters are changed */
             cleanup();
 
-
-            {prefix}struct* m = initialize(mexPrintf);
+            m = {prefix}initialize(mexPrintf);
 
             if (!m) {{
               cleanup();
               mexErrMsgIdAndTxt( "MATLAB:s_function:invalidParameter",
                                 "Failed to initialize.");
             }}
-            print_problem(m);
+            {prefix}print_problem(m);
 
             /* Read work vector requirements */
-            work(m, &sz_arg, &sz_res, &sz_iw, &sz_w);
+            {prefix}work(m, &sz_arg, &sz_res, &sz_iw, &sz_w);
 
             /* Set up CasADi function work vector sizes */
             ssSetNumRWork(S, sz_w);
             ssSetNumIWork(S, sz_iw*sizeof(casadi_int)/sizeof(int_T));
             ssSetNumPWork(S, sz_arg+sz_res);
 
-            int n_p = get_id_count(m, "p");
-            if (!ssSetNumInputPorts(S, n_p+1)) return;
+            int n_p = {prefix}get_id_count(m, "p");
+            if (!ssSetNumInputPorts(S, n_p)) return;
             if (n_p<0) {{
               cleanup();
               mexErrMsgIdAndTxt( "MATLAB:s_function:invalidParameter",
                                 "Failure.");
             }}
             for (i=0;i<n_p;++i) {{
-              get_id_from_index(m, "p", i, &id);
-              get_size(m, "p", id, &n_row, &n_col);
+              {prefix}get_id_from_index(m, "p", i, &id);
+              {prefix}get_size(m, "p", id, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
               ssSetInputPortDirectFeedThrough(S, i, 1);
               ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
             }}
 
-            get_size(m, "x_current", IMPACT_ALL, &n_row, &n_col);
+            /*{prefix}get_size(m, "x_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
             ssSetInputPortDirectFeedThrough(S, i, 1);
             ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
+            i++;
 
-            if (!ssSetNumOutputPorts(S, 1)) return;
+            {prefix}get_size(m, "u_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
+            ssSetInputPortDirectFeedThrough(S, i, 1);
+            ssSetInputPortMatrixDimensions(S, i, n_row, n_col);*/
 
-            get_size(m, "u_opt", 0, &n_row, &n_col);
-            ssSetOutputPortMatrixDimensions(S, 0, n_row, 1);
+            if (!ssSetNumOutputPorts(S, 2)) return;
+
+            {prefix}get_size(m, "u_opt", IMPACT_ALL, 0, IMPACT_FULL, &n_row, &n_col);
+            ssSetOutputPortMatrixDimensions(S, 0, n_row, n_col);
+
+            {prefix}get_size(m, "x_opt", IMPACT_ALL, 1, IMPACT_FULL, &n_row, &n_col);
+            ssSetOutputPortMatrixDimensions(S, 1, n_row, n_col);
 
             ssSetNumSampleTimes(S, 1);
             
@@ -1125,7 +1158,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
             /* specify the sim state compliance to be same as a built-in block */
             ssSetSimStateCompliance(S, USE_DEFAULT_SIM_STATE);
 
-            // Make sure mdlTerminate is called on error
+            /* Make sure mdlTerminate is called on error */
             ssSetOptions(S,
                         SS_OPTION_WORKS_WITH_CODE_REUSE |
                         SS_OPTION_EXCEPTION_FREE_CODE |
@@ -1138,6 +1171,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
         */
         static void mdlInitializeSampleTimes(SimStruct *S)
         {{
+            mexPrintf("mdlInitializeSampleTimes\\n");
             ssSetSampleTime(S, 0, INHERITED_SAMPLE_TIME);
             ssSetOffsetTime(S, 0, 0.0);
             ssSetModelReferenceSampleTimeDefaultInheritance(S); 
@@ -1145,12 +1179,18 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
         static void mdlOutputs(SimStruct *S, int_T tid)
         {{
+            if (!m) {{
+              mexPrintf("mdlOutputs (nullptr)\\n");
+              return;
+            }}
             void** p;
             const real_T** arg;
             double* w;
             casadi_int* iw;
             int_T i;
             const char* id;
+
+            mexPrintf("mdlOutputs %p\\n", m);
 
             /* Set up CasADi function work vectors */
             p = ssGetPWork(S);
@@ -1160,26 +1200,30 @@ int {prefix}flag_value({prefix}struct* m, int index);
             w = ssGetRWork(S);
             iw = (casadi_int*) ssGetIWork(S);
 
-            set_work(m, arg, res, iw, w);
+            {prefix}set_work(m, arg, res, iw, w);
             
             /* Point to input and output buffers */  
             for (i=0; i<ssGetNumInputPorts(S);++i) {{
-              get_id_from_index(m, "p", i, &id);
-              set(m, "p", id, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), IMPACT_FULL);
+              {prefix}get_id_from_index(m, "p", i, &id);
+              {prefix}set(m, "p", id, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), IMPACT_FULL);
             }}
-            get_id_from_index(m, "x_current", i, &id);
-            set(m, "x_current", id, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), IMPACT_FULL);
+            /*{prefix}get_id_from_index(m, "x_current", i, &id);
+            {prefix}set(m, "x_current", id, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), IMPACT_FULL);*/
 
-            print_problem(m);
+            {prefix}solve(m);
+            {prefix}print_problem(m);
 
-            get(m, "u_opt", IMPACT_ALL, 0, ssGetOutputPortRealSignal(S, 0), IMPACT_FULL);
+            {prefix}get(m, "u_opt", IMPACT_ALL, 0, ssGetOutputPortRealSignal(S, 0), IMPACT_FULL);
+            {prefix}get(m, "x_opt", IMPACT_ALL, 1, ssGetOutputPortRealSignal(S, 1), IMPACT_FULL);
 
         }}
 
         static void mdlStart(SimStruct *S) {{
+          mexPrintf("mdlStart\\n");
         }}
 
         static void mdlTerminate(SimStruct *S) {{
+          mexPrintf("mdlTerminate\\n");
           cleanup();
         }}
 
@@ -1198,13 +1242,149 @@ int {prefix}flag_value({prefix}struct* m, int index);
         mex('-v','-g',['-I{build_dir_abs}'],['-L{build_dir_abs}'],'-l{name}','LDFLAGS="\$LDFLAGS -Wl,-rpath,{build_dir_abs}"', '{s_function_file_name}')
        """)
 
-    py_file_name = os.path.join(build_dir_abs,name+".py")
+    shutil.copy(os.path.join(self.basename,"templates","python","impact.py"), os.path.join(build_dir_abs,"impact.py"))
+    py_file_name = os.path.join(build_dir_abs,"hello_world_" + name+".py")
       
     with open(py_file_name,"w") as out:
       out.write(f"""
 
-      class Impact:
-        
+import pylab as plt
+import numpy as np
+
+from impact import Impact
+
+impact = Impact("cart_pendulum",dir="..")
+
+print("Solve a single OCP (default parameters)")
+impact.solve()
+
+# Get solution trajectory
+x_opt = impact.get("x_opt", impact.ALL, impact.EVERYWHERE, impact.FULL)
+
+# Plotting
+
+
+_, ax = plt.subplots(2,1,sharex=True)
+ax[0].plot(x_opt.T)
+ax[0].set_title('Single OCP')
+ax[0].set_xlabel('Sample')
+
+print("Running MPC simulation loop")
+
+history = []
+for i in range(100):
+  impact.solve()
+
+  # Optimal input at k=0
+  u = impact.get("u_opt", impact.ALL, 0, impact.FULL)
+
+  # Simulate 1 step forward in time
+  # (TODO: use simulation model other than MPC model)
+  x_sim = impact.get("x_opt", impact.ALL, 1, impact.FULL)
+
+  # Update current state
+  impact.set("x_current", impact.ALL, 0, impact.FULL, x_sim)
+  history.append(x_sim)
+
+# More plotting
+ax[1].plot(np.hstack(history).T)
+ax[1].set_title('Simulated MPC')
+ax[1].set_xlabel('Sample')
+plt.show()
+
 
 
       """)
+
+    simulink_library_name = "library_"+name
+    simulink_library_dirname = os.path.join(build_dir_abs,simulink_library_name)
+    simulink_library_filename = simulink_library_dirname+".slx"
+
+    template = os.path.join("..","dirac_mpc","templates","simulink","lib2016b.slx")
+    with ZipFile(template) as zipfile:
+      zipfile.extractall(path=simulink_library_dirname)
+    blockdiagram_filename = os.path.join(simulink_library_dirname,"simulink","blockdiagram.xml")
+    with open(blockdiagram_filename,'r') as blockdiagram_file:
+      tree = etree.parse(blockdiagram_file)
+
+    system = tree.find('.//System')
+    for e in system.findall('Block'):
+      system.remove(e)
+    for e in system.findall('Line'):
+      system.remove(e)
+    highwater = system.find('P[@Name="SIDHighWatermark"]')
+    highwater.text = str(len(parameters))
+
+    stride_height  = 40
+    padding_height = 10
+    unit_height  = 40
+
+    margin_left = 100
+    margin_top = 100
+
+    constant_width = 30
+    constant_height = 30
+
+    line_width = 100
+    sfun_width = 200
+
+    constant_height_offset = 5
+
+
+    for i,p in enumerate(parameters):
+      id = i+2
+      zorder = 7
+      value = f"NaN({p.shape[0]},{p.shape[1]})"
+      block = etree.fromstring(f"""
+    <Block BlockType="Constant" Name="Constant" SID="{id}">
+      <P Name="Position">[{margin_left}, {margin_top+i*stride_height+constant_height_offset}, {margin_left+constant_width}, {margin_top+constant_height+i*stride_height+constant_height_offset}]</P>
+      <P Name="ZOrder">{zorder}</P>
+      <P Name="Value">{value}</P>
+      <P Name="VectorParams1D">off</P>
+    </Block>
+    """)
+      system.append(block)
+    sfun_id = i+3
+    zorder = 8
+
+    mask_commands = []
+    for i,p in enumerate(parameters_symbols):
+      mask_commands.append(f"port_label('input',{i+1},'{p.name()}');")
+    mask_commands.append(f"disp('IMPACT MPC\\n{name}');")
+    mask_commands.append(f"port_label('output',1,'u_opt @ k=0');")
+    mask_commands.append(f"port_label('output',2,'x_opt @ k=1');")
+    mask_commands = "\n".join(mask_commands)
+    block = etree.fromstring(f"""
+    <Block BlockType="S-Function" Name="S-Function1" SID="{sfun_id}">
+      <P Name="Ports">[{len(parameters)}, 2]</P>
+      <P Name="Position">[{margin_left+constant_width+line_width}, {margin_top}, {margin_left+constant_width+line_width+sfun_width}, {margin_top+len(parameters)*stride_height}]</P>
+      <P Name="ZOrder">{zorder}</P>
+      <P Name="FunctionName">{s_function_name}</P>
+      <P Name="SFunctionDeploymentMode">off</P>
+      <P Name="EnableBusSupport">off</P>
+      <P Name="SFcnIsStateOwnerBlock">off</P>
+      <Object PropName="MaskObject" ObjectID="7" ClassName="Simulink.Mask">
+        <P Name="Display" Class="char">{mask_commands}</P>
+      </Object>
+    </Block>
+    """)
+    system.append(block)
+
+    for i,p in enumerate(parameters):
+      id = i+2
+      zorder = 7
+      value = f"NaN({p.shape[0]},{p.shape[1]})"
+      block = etree.fromstring(f"""
+      <Line>
+        <P Name="ZOrder">1</P>
+        <P Name="Src">{id}#out:1</P>
+        <P Name="Dst">{sfun_id}#in:{i+1}</P>
+      </Line>
+      """)
+      system.append(block)
+
+
+    tree.write(blockdiagram_filename)
+    shutil.make_archive(simulink_library_filename,'zip',simulink_library_dirname)
+    shutil.move(simulink_library_filename+".zip",simulink_library_filename)
+

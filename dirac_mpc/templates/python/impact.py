@@ -90,4 +90,3 @@ class Impact:
     def __del__(self):
         if hasattr(self, "_m"):
             self._destroy(self._m)
-

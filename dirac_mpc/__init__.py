@@ -1,5 +1,4 @@
 from .mpc import MPC
-from .impact import Impact
 from rockit import DirectCollocation, MultipleShooting, SingleShooting, matlab_path
 import os
 
