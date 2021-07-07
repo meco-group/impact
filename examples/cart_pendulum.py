@@ -1,5 +1,4 @@
 from dirac_mpc import *
-from casadi import *
 
 mpc = MPC(T=2.0)
 
@@ -17,7 +16,7 @@ mpc.add_objective(mpc.integral(weights[0]*cart_pendulum.F**2 + weights[1]*100*ca
 mpc.subject_to(-2 <= (cart_pendulum.F <= 2 ))
 mpc.subject_to(-2 <= (cart_pendulum.pos <= 2))
 
-# Initial constraints
+# Boundary constraints
 mpc.subject_to(mpc.at_t0(cart_pendulum.x)==x_current)
 mpc.subject_to(mpc.at_tf(cart_pendulum.x)==x_final)
 
