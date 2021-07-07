@@ -24,33 +24,40 @@ def remove_prefix(n,prefix):
   else:
     n
 
-class DotDict:
+class DotDict(object):
   """like a dict but access through . """
-  def __init__(self, d={}):
-    for k,v in d.items():
-      setattr(self,k,v)
+  def __init__(self, d=None):
+    if d is None:
+      d = {}
+    self._d = d
+
+  def __getattr__(self, k):
+    try:
+      return self._d[k]
+    except:
+      raise AttributeError()
   
   def _update(self, d, allow_keyword=False):
     for k,v in d.items():
       if allow_keyword:
-        if hasattr(self,k):
-          old = getattr(self,k)
+        if k in self._d:
+          old = self._d[k]
           if isinstance(old,list):
-            setattr(self,k,old+v)
+            self._d[k]=old+v
           else:
-            setattr(self,k,veccat(old,v))
+            self._d[k] = veccat(old,v)
         else:
-          setattr(self,k,v)
+          self._d[k] = v
       else:
         if k in keywords:
           raise Exception("'%s' is a reserved keyword. Please use another name." % k)
-        if hasattr(self, k):
+        if k in self._d:
           raise Exception("Name collision: '%s' already in use." % k)
-        setattr(self,k,v)
+        self._d[k] = v
       
   def __repr__(self,indent=0):
     s = "{\n"
-    for k,v in sorted(self.__dict__.items()):
+    for k,v in sorted(self._d.items()):
       s += ("  " * (indent+1)) + k
       try:
         s += ": " + v.__repr__(indent=indent+1)
@@ -63,6 +70,7 @@ class DotDict:
       s += "\n"
     s+=("  " * indent) + "}"
     return s
+
 
 class Structure:
   def __init__(self, definition,prefix=""):
@@ -131,8 +139,8 @@ class MPC(Ocp):
     # Define constants
     constants = {}
     definitions = casadi.__dict__
-    locals = dict(m.__dict__)
-    for k,v in m.__dict__.items():
+    locals = dict(m._d)
+    for k,v in m._d.items():
       if k.startswith(name+"."):
         locals[k[len(name)+1:]] = v
     if "constants" in model_meta:
@@ -236,8 +244,8 @@ class MPC(Ocp):
     # Define Outputs
     outputs = {}
     definitions = casadi.__dict__
-    locals = dict(m.__dict__)
-    for k,v in m.__dict__.items():
+    locals = dict(m._d)
+    for k,v in m._d.items():
       if k.startswith(name+"."):
         locals[k[len(name)+1:]] = v
     if "outputs" in model_meta:
