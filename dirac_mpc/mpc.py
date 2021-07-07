@@ -286,6 +286,12 @@ class MPC(Ocp):
     ocpfun.save(casadi_file_name)
     prefix = "impact_"
 
+    def strlist(a):
+      return ",".join('"'+e+'"' if isinstance(e,str) else str(e) for e in a)
+
+
+    pool_names = ["x_initial_guess","u_initial_guess","p","x_opt","u_opt"]
+
     c_file_name = os.path.join(build_dir_abs,name+".c")
     h_file_name = os.path.join(build_dir_abs,name+".h")
     hello_file_name = os.path.join(build_dir_abs,"hello_world_"+name)
@@ -438,82 +444,102 @@ class MPC(Ocp):
         out.write(f"#define IMPACT_{flag_name} {flag_value}\n")
 
       out.write(f"""
-#define casadi_real double
-#define casadi_int long long int
-
-typedef struct {prefix}_pool {{
-  casadi_int n;
-  casadi_int size;            
-  const char** names; /* length n */
-  const casadi_int* trajectory_length;  /*  length n */
-  const casadi_int* part_offset;  /*  length n */
-  const casadi_int* part_unit;  /*  length n a non-full may span multiple parts */
-  const casadi_int* part_stride;  /*  length n a non-full may span multiple parts */
-  casadi_real* data;
-  casadi_int stride;
-}} {prefix}pool;
 
 struct {prefix}struct;
 typedef struct {prefix}_struct {prefix}struct;
 
 typedef int (*formatter)(const char * s);
-typedef void (*fatal_fp)({prefix}struct* m, const char * loc, const char * fmt, ...);
-typedef void (*info_fp)({prefix}struct* m, const char * fmt, ...);
 
-typedef struct {prefix}_struct {{
-  int id;
-  int pop; /*  need to pop when destroyed? */
-  casadi_int n_in;
-  casadi_int n_out;
+/**
+  \\brief Initialize and instance of an impact library
 
-  casadi_int sz_arg;
-  casadi_int sz_res;
-  casadi_int sz_iw;
-  casadi_int sz_w;
+  \\note Any call to \\c initialize must be followed up with a call to \\c destroy within the same process.
 
-  const casadi_real** arg;
-  casadi_real** res;
-  casadi_int* iw;
-  casadi_real* w;
+  \\param[in]  fp Function pointer to a printf-like function
+              Common values: 0 (null pointer: no printing), printf (C's standard printf method defined in stdio)
 
-  const casadi_real** arg_casadi;
-  casadi_real** res_casadi;
-  casadi_int* iw_casadi;
-  casadi_real* w_casadi;
 
-  {prefix}pool* x_current;
+  \\return Impact instance pointer, or a null pointer upon failure
 
-  {prefix}pool* u_initial_guess;
-  {prefix}pool* x_initial_guess;
-  {prefix}pool* p;
+*/
+{prefix}struct* {prefix}initialize(formatter fp);
+/**
+  \\brief Destroy impact instance
 
-  {prefix}pool* u_opt;
-  {prefix}pool* x_opt;
+  \\note May be needed to avoid segementation faults on exit
+  \\note It is safe to pass a null pointer as argument
 
-  int mem;
-
-  formatter fp;
-  fatal_fp fatal;
-  info_fp info;
-}} {prefix}struct;
-
-{prefix}struct* {prefix}initialize();
+  \\parameter[in] Impact instance pointer
+*/
 void {prefix}destroy({prefix}struct* m);
 
+/**
+  \\brief Compute an MPC action
+
+  \details
+  Parameters (\\b p) and initial guesses (\\b x_initial_guess, \\b u_initial_guess)
+  can be supplied through \\c get.
+  If not supplied, defaults will be taken from the user definition.
+  Outputs of the optimization are written into internal pools \\b x_opt and \\b u_opt,
+  and can be queried using \\c get. 
+
+  \\parameter[in] Impact instance pointer
+
+  \\return 0 indicates success
+
+*/
 int {prefix}solve({prefix}struct* m);
 
-/*
-*   
-*/
+/**
+  \\brief Print numerical data present in pools
 
-int {prefix}get({prefix}struct* m, const char* pool_name, const char* id, int stage, double* dst, int dst_flags);
-int {prefix}set({prefix}struct* m, const char* pool_name, const char* id, int stage, const double* src, int src_flags);
+  \\parameter[in] Impact instance pointer
+
+  \\return 0 indicates success
+
+*/
+int {prefix}print_problem({prefix}struct* m);
+
+/** \\brief Getting and setting numerical data
+
+  \\parameter[in] m            Impact instance pointer
+  \\parameter[in] pool_name    Any of: { strlist(pool_names) }
+  \\parameter[in] id           String identifier for a specific variable name, or IMPACT_ALL
+  \\parameter[in] stage        Specific time instance (0-based), or IMPACT_EVERYWHERE
+  \\parameter[in] flags    Composable (using bitwise or '|' ) flags that modify behaviour
+                            IMPACT_FULL: default
+                            IMPACT_COLUMN_MAJOR (fortran ordering - default)
+                            IMPACT_ROW_MINOR (C ordering)
+                            IMPACT_HREP (repeat horizontally )
+
+  \\return Negative number upon failure
+
+ */
+ /* @{{ **
+/**
+  \\brief Get numerical data
+  \\parameter[in] dst          Pointer to a chunk of writable memory.
+                               There must be space of at least \\b n_row* \\b n_col which can be retrieved using \\c get_size
+*/
+int {prefix}get({prefix}struct* m, const char* pool_name, const char* id, int stage, double* dst, int flags);
+/**
+  \\brief Set numerical data
+  \\parameter[in] src          Pointer to a chunk of readable memory.
+                               There will be \\b n_row* \\b n_col elements read which can be retrieved using \\c get_size
+*/
+int {prefix}set({prefix}struct* m, const char* pool_name, const char* id, int stage, const double* src, int flags);
+/**
+  \\brief Get shape of data
+*/
+int {prefix}get_size({prefix}struct* m, const char* pool_name, const char* id, int stage, int flags, int* n_row, int* n_col);
+/* @}} */
 
 
 int {prefix}get_id_count({prefix}struct* m, const char* pool_name);
 int {prefix}get_id_from_index({prefix}struct* m, const char* pool_name, int index, const char** id);
-int {prefix}get_size({prefix}struct* m, const char* pool_name, const char* id, int stage, int flags, int* n_row, int* n_col);
-int {prefix}print_problem({prefix}struct* m);    
+
+#define casadi_real double
+#define casadi_int long long int
 
 int {prefix}allocate({prefix}struct* m);
 void {prefix}set_work({prefix}struct* m, const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w);
@@ -572,12 +598,11 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
     p_trajectory_length = [1 for p in self.parameters['']]+[self._method.N for p in self.parameters['control']]
 
-    def strlist(a):
-      return ",".join(str(e) for e in a)
 
     p_part_stride = p_part_unit
     u_part_stride = [self.nu for u in self.controls]
     x_part_stride = [self.nx for x in self.states]
+
 
     with open(c_file_name,"w") as out:
       out.write(f"""
@@ -585,6 +610,58 @@ int {prefix}flag_value({prefix}struct* m, int index);
           #include <string.h>          
           #include <casadi/casadi_c.h>
           #include "{name}.h"
+
+          typedef struct {prefix}_pool {{
+            casadi_int n;
+            casadi_int size;            
+            const char** names; /* length n */
+            const casadi_int* trajectory_length;  /*  length n */
+            const casadi_int* part_offset;  /*  length n */
+            const casadi_int* part_unit;  /*  length n a non-full may span multiple parts */
+            const casadi_int* part_stride;  /*  length n a non-full may span multiple parts */
+            casadi_real* data;
+            casadi_int stride;
+          }} {prefix}pool;
+
+          typedef void (*fatal_fp)({prefix}struct* m, const char * loc, const char * fmt, ...);
+          typedef void (*info_fp)({prefix}struct* m, const char * fmt, ...);
+
+          typedef struct {prefix}_struct {{
+            int id;
+            int pop; /*  need to pop when destroyed? */
+            casadi_int n_in;
+            casadi_int n_out;
+
+            casadi_int sz_arg;
+            casadi_int sz_res;
+            casadi_int sz_iw;
+            casadi_int sz_w;
+
+            const casadi_real** arg;
+            casadi_real** res;
+            casadi_int* iw;
+            casadi_real* w;
+
+            const casadi_real** arg_casadi;
+            casadi_real** res_casadi;
+            casadi_int* iw_casadi;
+            casadi_real* w_casadi;
+
+            {prefix}pool* x_current;
+
+            {prefix}pool* u_initial_guess;
+            {prefix}pool* x_initial_guess;
+            {prefix}pool* p;
+
+            {prefix}pool* u_opt;
+            {prefix}pool* x_opt;
+
+            int mem;
+
+            formatter fp;
+            fatal_fp fatal;
+            info_fp info;
+          }} {prefix}struct;
 
           // For printing
           #include <stdio.h>
@@ -616,7 +693,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
           static const casadi_real {prefix}x_nominal[{x_nominal.size}] = {{ {",".join("%0.16f" % e for e in x_nominal)} }};
           static const casadi_real {prefix}x_current_nominal[{x_current_nominal.size}] = {{ {",".join("%0.16f" % e for e in x_current_nominal)} }};
 
-          static const char* {prefix}pool_names[5] = {{"x_initial_guess","u_initial_guess","p","x_opt","u_opt"}};
+          static const char* {prefix}pool_names[{len(pool_names)}] = {{ {strlist(pool_names)} }};
 
 
           static const char* {prefix}flag_names[{len(flags)}] = {{ {",".join('"%s"' % e for e in flags.keys())} }};
@@ -793,12 +870,14 @@ int {prefix}flag_value({prefix}struct* m, int index);
           }}
 
           void {prefix}destroy({prefix}struct* m) {{
-            /* Free memory (thread-safe) */
-            casadi_c_decref_id(m->id);
-            // Release thread-local (not thread-safe)
-            casadi_c_release_id(m->id, m->mem);
-            if (m->pop) casadi_c_clear();
-            free(m);
+            if (m) {{
+              /* Free memory (thread-safe) */
+              casadi_c_decref_id(m->id);
+              // Release thread-local (not thread-safe)
+              casadi_c_release_id(m->id, m->mem);
+              if (m->pop) casadi_c_clear();
+              free(m);
+            }}
           }}
 
           void {prefix}set_work({prefix}struct* m, const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w) {{
@@ -1063,9 +1142,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
     if p.returncode!=0:
       raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
     # breaks matlab
-    #p = subprocess.run(["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-L"+build_dir_abs,"-o",hello_file_name,"-Wl,-rpath="+build_dir_abs], capture_output=True, text=True)
-    #if p.returncode!=0:
-    #  raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
+    p = subprocess.run(["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-L"+build_dir_abs,"-o",hello_file_name,"-Wl,-rpath="+build_dir_abs], capture_output=True, text=True)
+    if p.returncode!=0:
+      raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
 
     s_function_name = name+"_s_function_level2"
 
