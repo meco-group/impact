@@ -101,13 +101,22 @@ classdef PythonCasadiInterface < handle
               mod = char(py.getattr(e,'__module__'));
             except
             end
+            a = split(class(e),'.');
+            h = str2func([a{1} '.' a{2} '.matlab_path']);
+            has_matlab = false;
+            try
+                h();
+                has_matlab = true;
+            catch
+            end
             if strcmp(mod,'casadi.casadi')
               obj.python_serializer.pack(e);
               obj.matlab_deserializer.decode(char(obj.python_serializer.encode()));
               out = obj.matlab_deserializer.unpack();
-            elseif startsWith(mod,'rockit')
-              a = split(class(e),'.');
-              out = rockit.(a{end})(e);
+            elseif has_matlab
+              name = [a{2} '.' a{end}];
+              h = str2func(name);
+              out = h(e);
             elseif py.hasattr(e,'__call__')
               out = @(varargin) obj.apply(e,varargin{:});
             else

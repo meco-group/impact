@@ -120,8 +120,12 @@ class Model(DotDict):
 class MPC(Ocp):
   def __init__(self, **kwargs):
     Ocp.__init__(self, **kwargs)
-    self.expr = Model()
+    self._expr = Model()
     self.basename = os.path.dirname(__file__)
+
+  @property
+  def expr(self):
+      return self._expr
 
   def parameter(self,name,*args,**kwargs):
     p = MX.sym(name,*args)

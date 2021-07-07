@@ -1,11 +1,12 @@
 addpath(char(py.dirac_mpc.matlab_path))
 
 import dirac_mpc.*
-import casadi.*
 
 mpc = MPC('T',2.0);
 
 cart_pendulum = mpc.add_model('cart_pendulum','cart_pendulum.yaml');
+
+mpc.expr.cart_pendulum.pos
 
 % Parameters
 x_current = mpc.parameter('x_current',cart_pendulum.nx);
@@ -15,7 +16,7 @@ weights = mpc.parameter('weights',2);
 % Objectives
 
 % TODO: support weights
-mpc.add_objective(mpc.integral(cart_pendulum.F^2 + 100*cart_pendulum.pos^2))
+mpc.add_objective(mpc.integral(weights(1)*cart_pendulum.F^2 + 100*cart_pendulum.pos^2))
 
 % Path constraints
 mpc.subject_to(-2 <= (cart_pendulum.F <= 2 ))
@@ -41,8 +42,3 @@ mpc.set_value(weights, [1,1])
 mpc.method(MultipleShooting('N',50,'M',1,'intg','rk'))
 
 mpc.export('cart_pendulum')
-
-
-%impact = Impact('cart_pendulum');
-%impact.print_problem();
-%impact.solve();

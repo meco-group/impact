@@ -43,7 +43,7 @@ classdef MPC < rockit.Ocp & rockit.Stage
     end
     function varargout = export(obj,varargin)
       global pythoncasadiinterface
-      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,1,{'name','dir'});
+      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,1,{'name','src_dir'});
       if isempty(kwargs)
         res = obj.parent.export(args{:});
       else
@@ -57,6 +57,10 @@ classdef MPC < rockit.Ocp & rockit.Stage
     current = cd(build_dir);
     run('build.m');
     cd(current);
+    end
+    function out = expr(obj)
+      global pythoncasadiinterface
+      out = pythoncasadiinterface.python2matlab(obj.parent.expr);
     end
   end
 end

@@ -7,8 +7,8 @@ dtheta = MX.sym('dtheta');
 
 F = MX.sym('F');
 
-mcart = 0.5;   % cart mass [kg]
-m = 1;         % pendulum mass [kg]
+mcart = 0.5;   % cart mass      [kg]
+m = 1;         % pendulum mass  [kg]
 L = 2;         % pendulum length [m]
 g = 9.81;      % gravitation [m/s^2]
 

@@ -1,4 +1,4 @@
-from .mpc import MPC
+from .mpc import MPC, Model, DotDict
 from rockit import DirectCollocation, MultipleShooting, SingleShooting, matlab_path
 import os
 
