@@ -9,10 +9,10 @@ class Impact:
         fun.argtypes = argtypes
         fun.restype = restype
 
-    def __init__(self, name, dir="."):
+    def __init__(self, name, src_dir="."):
         self.prefix = "impact_"
         build_dir_rel = name+"_build_dir"
-        build_dir_abs = os.path.join(os.path.abspath(dir),build_dir_rel)
+        build_dir_abs = os.path.join(os.path.abspath(src_dir),build_dir_rel)
 
         # PyDLL instead of CDLL to keep GIL:
         # virtual machine emits Python prints

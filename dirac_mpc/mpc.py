@@ -166,11 +166,9 @@ class MPC(Ocp):
       
       for i in range(model.n_in()):
         assert model.sparsity_in(i).is_vector()
-      model_res = model(**args)
     else:
       # Not defined yet, defer until after variables meta-data
       model = None
-      model_res = {}
 
     # Read variables meta-data
     args = {}
@@ -202,15 +200,19 @@ class MPC(Ocp):
             register(e)
         else:
           if model:
-            v = getattr(self,rockit_name)(var_len)
-            m._register(key, v)
+            v = getattr(self,rockit_name)("dummy",var_len)
+            #m._register(key, v)
           else:
             v = MX(0, 1)
         args[key] = v
       nd[key] = var_len
+
+    if "external" in equations:
+      model_res = model(**args)
     
     # Parse inline equations
     if "inline" in equations:
+      model_res = {}
       inline = equations["inline"]
       if "ode" in inline:
         ode = inline["ode"]
@@ -254,9 +256,9 @@ class MPC(Ocp):
     return m
 
 
-  def export(self,name,dir="."):
+  def export(self,name,src_dir="."):
     build_dir_rel = name+"_build_dir"
-    build_dir_abs = os.path.join(os.path.abspath(dir),build_dir_rel)
+    build_dir_abs = os.path.join(os.path.abspath(src_dir),build_dir_rel)
 
     os.makedirs(build_dir_abs,exist_ok=True)
     # Clean directory (but do not delete it,
@@ -1323,6 +1325,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
     shutil.copy(os.path.join(self.basename,"templates","python","impact.py"), os.path.join(build_dir_abs,"impact.py"))
     py_file_name = os.path.join(build_dir_abs,"hello_world_" + name+".py")
+
       
     with open(py_file_name,"w") as out:
       out.write(f"""
@@ -1332,10 +1335,13 @@ import numpy as np
 
 from impact import Impact
 
-impact = Impact("cart_pendulum",dir="..")
+impact = Impact("cart_pendulum",src_dir="..")
 
 print("Solve a single OCP (default parameters)")
 impact.solve()
+
+# Get {self.states[0].name()} solution trajectory
+print(impact.get("x_opt", "{self.states[0].name()}", impact.EVERYWHERE, impact.FULL))
 
 # Get solution trajectory
 x_opt = impact.get("x_opt", impact.ALL, impact.EVERYWHERE, impact.FULL)
