@@ -295,6 +295,41 @@ class MPC(Ocp):
 
     pool_names = ["x_initial_guess","u_initial_guess","p","x_opt","u_opt"]
 
+    p_offsets = [0]
+    for p in parameters:
+      p_offsets.append(p_offsets[-1]+p.numel())
+
+    p_nominal = self._method.opti.value(vvcat(parameters),self._method.opti.initial())
+    x_nominal = self._method.opti.value(vec(states),self._method.opti.initial())
+    u_nominal = self._method.opti.value(vec(controls),self._method.opti.initial())
+
+
+
+    np = vvcat(parameters).numel()
+
+
+
+    p_names = ['"'+p.name()+'"' for p in self.parameters['']+self.parameters['control']]
+    x_names = ['"'+x.name()+'"' for x in self.states]
+    u_names = ['"'+u.name()+'"' for u in self.controls]
+
+    i_x_current = None
+    count = 0
+
+    p_part_offset = [0]
+    p_part_unit = []
+    for p_symbol,p_sampled in zip(parameters_symbols,parameters):
+      if p_symbol.name()=="x_current":
+        i_x_current = count
+      count += 1
+      p_part_unit.append(p_symbol.numel())
+      p_part_offset.append(p_part_offset[-1]+p_sampled.numel())
+
+    if i_x_current is None:
+      raise Exception("You must define a parameter named 'x_current'")
+
+    x_current_nominal = self._method.opti.value(parameters[i_x_current],self._method.opti.initial())
+
     c_file_name = os.path.join(build_dir_abs,name+".c")
     h_file_name = os.path.join(build_dir_abs,name+".h")
     hello_file_name = os.path.join(build_dir_abs,"hello_world_"+name)
@@ -393,9 +428,18 @@ class MPC(Ocp):
             return 1;
           }}
 
+          double x0[{x_current_nominal.size}] = {{ {",".join("%0.16f" % e for e in x_current_nominal)} }};
+
+          impact_set(m, "x_current", IMPACT_ALL, IMPACT_EVERYWHERE, x0, IMPACT_FULL);
+
+          double num = {"%0.16f" % x_current_nominal[0]};
+
+          impact_set(m, "x_current", "{self.states[0].name()}", IMPACT_EVERYWHERE, &num, IMPACT_FULL);
+
           impact_print_problem(m);
 
           impact_solve(m);
+
 
           // Allocate scratch space for state and control trajectories
           impact_get_size(m, "u_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
@@ -555,37 +599,6 @@ int {prefix}flag_value({prefix}struct* m, int index);
       """
       )
 
-    p_offsets = [0]
-    for p in parameters:
-      p_offsets.append(p_offsets[-1]+p.numel())
-
-    p_nominal = self._method.opti.value(vvcat(parameters),self._method.opti.initial())
-    x_nominal = self._method.opti.value(vec(states),self._method.opti.initial())
-    u_nominal = self._method.opti.value(vec(controls),self._method.opti.initial())
-    x_current_nominal = self._method.opti.value(states[:,0],self._method.opti.initial())
-
-    np = vvcat(parameters).numel()
-
-
-
-    p_names = ['"'+p.name()+'"' for p in self.parameters['']+self.parameters['control']]
-    x_names = ['"'+x.name()+'"' for x in self.states]
-    u_names = ['"'+u.name()+'"' for u in self.controls]
-
-    i_x_current = None
-    count = 0
-
-    p_part_offset = [0]
-    p_part_unit = []
-    for p_symbol,p_sampled in zip(parameters_symbols,parameters):
-      if p_symbol.name()=="x_current":
-        i_x_current = count
-      count += 1
-      p_part_unit.append(p_symbol.numel())
-      p_part_offset.append(p_part_offset[-1]+p_sampled.numel())
-
-    if i_x_current is None:
-      raise Exception("You must define a parameter named 'x_current'")
 
     x_part_offset = [0]
     x_part_unit = []
@@ -1145,9 +1158,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
     if p.returncode!=0:
       raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
     # breaks matlab
-    p = subprocess.run(["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-L"+build_dir_abs,"-o",hello_file_name,"-Wl,-rpath="+build_dir_abs], capture_output=True, text=True)
-    if p.returncode!=0:
-      raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
+    #p = subprocess.run(["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-L"+build_dir_abs,"-o",hello_file_name,"-Wl,-rpath="+build_dir_abs], capture_output=True, text=True)
+    #if p.returncode!=0:
+    #  raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
 
     s_function_name = name+"_s_function_level2"
 
