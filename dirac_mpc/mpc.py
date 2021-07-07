@@ -88,6 +88,7 @@ class Structure:
 
 class Model(DotDict):
   def __init__(self, prefix=""):
+    DotDict.__init__(self)
     self._prefix = prefix
     self.all = DotDict()
 
