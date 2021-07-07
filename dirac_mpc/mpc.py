@@ -1320,7 +1320,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
       
     with open(m_build_file_name,"w") as out:
       out.write(f"""
-        mex('-v','-g',['-I{build_dir_abs}'],['-L{build_dir_abs}'],'-l{name}','LDFLAGS="\$LDFLAGS -Wl,-rpath,{build_dir_abs}"', '{s_function_file_name}')
+        mex('-g',['-I{build_dir_abs}'],['-L{build_dir_abs}'],'-l{name}','LDFLAGS="\$LDFLAGS -Wl,-rpath,{build_dir_abs}"', '{s_function_file_name}')
        """)
 
     shutil.copy(os.path.join(self.basename,"templates","python","impact.py"), os.path.join(build_dir_abs,"impact.py"))
