@@ -1,3 +1,5 @@
+addpath(char(py.dirac_mpc.matlab_path))
+
 import dirac_mpc.*
 import casadi.*
 
@@ -25,7 +27,7 @@ mpc.subject_to(mpc.at_tf(cart_pendulum.x)==x_final)
 
 % Solver
 options = struct;
-options.ipopt.print_level = 5;
+options.ipopt.print_level = 0;
 options.expand = true;
 options.print_time = false;
 
