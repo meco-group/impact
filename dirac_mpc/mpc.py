@@ -899,7 +899,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
               casadi_c_decref_id(m->id);
               // Release thread-local (not thread-safe)
               casadi_c_release_id(m->id, m->mem);
-              if (m->pop) casadi_c_clear();
+              if (m->pop) casadi_c_pop();
               free(m);
             }}
           }}
