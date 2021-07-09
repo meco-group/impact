@@ -1337,9 +1337,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
       out.write(f"""
 
         if ispc
-          mex(['-I{build_dir_abs}'],['-I{GlobalOptions.getCasadiIncludePath()}'],['-L{build_dir_abs}'],['-L{GlobalOptions.getCasadiPath()}'],'-lcasadi', '{c_file_name}', '{s_function_file_name}')
+          mex(['-I{build_dir_abs}'],['-I{GlobalOptions.getCasadiIncludePath()}'],['-L{build_dir_abs}'],['-L{GlobalOptions.getCasadiPath()}'],'-lcasadi', '{s_function_file_name}', '{c_file_name}')
         else
-          mex('-g',['-I{build_dir_abs}'],['-I{GlobalOptions.getCasadiIncludePath()}'],['-L{build_dir_abs}'],['-L{GlobalOptions.getCasadiPath()}'],'-lcasadi','LDFLAGS="\$LDFLAGS -Wl,-rpath,{build_dir_abs}"', '{c_file_name}', '{s_function_file_name}')
+          mex('-g',['-I{build_dir_abs}'],['-I{GlobalOptions.getCasadiIncludePath()}'],['-L{build_dir_abs}'],['-L{GlobalOptions.getCasadiPath()}'],'-lcasadi','LDFLAGS="\$LDFLAGS -Wl,-rpath,{build_dir_abs}"', '{s_function_file_name}')
         end
        """)
 
