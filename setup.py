@@ -7,6 +7,8 @@ import os
 
 version = "0.1.1"
 
+print(find_packages(exclude=['tests', 'examples']))
+
 setup(
     name='dirac-mpc',
     version=version,
@@ -20,7 +22,10 @@ setup(
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     install_requires=[
-        'casadi>=3.5,<4.0'
+        'casadi>=3.5,<4.0',
+        'pyyaml',
+        'lxml',
+        'rockit-meco',
     ],
     download_url='https://gitlab.kuleuven.be/meco/projects/sbo_dirac/dirac_mpc/-/archive/v%s/dirac-mpc-v%s.tar.gz' % (version, version)
 )
