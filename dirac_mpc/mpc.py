@@ -1406,7 +1406,7 @@ plt.show()
     simulink_library_dirname = os.path.join(build_dir_abs,simulink_library_name)
     simulink_library_filename = simulink_library_dirname+".slx"
 
-    template = os.path.join("..","dirac_mpc","templates","simulink","lib2016b.slx")
+    template = os.path.join(self.basename,"templates","simulink","lib2016b.slx")
     with ZipFile(template) as zipfile:
       zipfile.extractall(path=simulink_library_dirname)
     blockdiagram_filename = os.path.join(simulink_library_dirname,"simulink","blockdiagram.xml")
