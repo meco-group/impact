@@ -507,7 +507,7 @@ class MPC(Ocp):
 
       out.write(f"""
 
-struct {prefix}struct;
+struct {prefix}_struct;
 typedef struct {prefix}_struct {prefix}struct;
 
 typedef int (*formatter)(const char * s);
@@ -657,7 +657,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
           typedef void (*fatal_fp)({prefix}struct* m, const char * loc, const char * fmt, ...);
           typedef void (*info_fp)({prefix}struct* m, const char * fmt, ...);
 
-          typedef struct {prefix}_struct {{
+          struct {prefix}_struct {{
             int id;
             int pop; /*  need to pop when destroyed? */
             casadi_int n_in;
@@ -692,7 +692,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
             formatter fp;
             fatal_fp fatal;
             info_fp info;
-          }} {prefix}struct;
+          }};
 
           // For printing
           #include <stdio.h>
@@ -810,17 +810,10 @@ int {prefix}flag_value({prefix}struct* m, int index);
               malloc(sizeof(casadi_int)*m->sz_iw),
               malloc(sizeof(casadi_real)*m->sz_w));
 
-            const casadi_real** arg = m->arg;
-            m->arg_casadi = arg;
-
-            casadi_real** res = m->res;
-            m->res_casadi = res;
-
-            casadi_int* iw = m->iw;
-            m->iw_casadi = iw;
-
-            casadi_real* w = m->w;
-            m->w_casadi = w;
+            m->arg_casadi = m->arg;
+            m->res_casadi = m->res;
+            m->iw_casadi = m->iw;
+            m->w_casadi = m->w;
 
             m->p = malloc(sizeof({prefix}pool));
             m->p->names = {prefix}p_names;
@@ -921,10 +914,6 @@ int {prefix}flag_value({prefix}struct* m, int index);
           void {prefix}work({prefix}struct* m, casadi_int* sz_arg, casadi_int* sz_res, casadi_int* sz_iw, casadi_int* sz_w) {{
             casadi_c_work_id(m->id, sz_arg, sz_res, sz_iw, sz_w);
             // We might want to be adding other working memory here
-          }}
-
-          int {prefix}nx({prefix}struct* m) {{
-
           }}
 
           const {prefix}pool* {prefix}get_pool_by_name({prefix}struct* m, const char* name) {{
@@ -1103,13 +1092,11 @@ int {prefix}flag_value({prefix}struct* m, int index);
             return 0;
           }}
 
-          int {prefix}nu({prefix}struct* m) {{
-
-          }}
-
           int {prefix}print_problem({prefix}struct* m) {{
             int i,j,k,l,max_len;
+            char formatbuffer[10];
             const {prefix}pool* p;
+            if (!m->fp) return 1;
             max_len=0;
             for (l=0;l<5;++l) {{
               p = {prefix}get_pool_by_name(m, {prefix}pool_names[l]);
@@ -1122,9 +1109,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
               for (l=0;l<5;++l) {{
                 const {prefix}pool* p = {prefix}get_pool_by_name(m, {prefix}pool_names[l]);
                 m->info(m, "=== %s ===\\n", {prefix}pool_names[l]);
-                char formatbuffer[10];
                 sprintf(formatbuffer, "%%-%ds", max_len);
-
                 for (i=0;i<p->n;++i) {{
                   m->info(m, formatbuffer, p->names[i]);
                   m->info(m, ":");
@@ -1141,6 +1126,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
                 }}
               }}
             }}
+            return 0;
           }}
 
           int {prefix}solve({prefix}struct* m) {{
@@ -1156,7 +1142,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
           }}
 
           int {prefix}get_p_by_id({prefix}struct* m, const char* id, const casadi_real* value) {{
-
+            return 0;
           }}
 
           void {prefix}get_u({prefix}struct* m, double* value) {{
@@ -1168,14 +1154,15 @@ int {prefix}flag_value({prefix}struct* m, int index);
     lib_name = name
     lib_file_name = os.path.join(build_dir_abs,"lib" + lib_name + ".so")
 
+    flags = ["-pedantic","-Wextra","-Wno-unknown-pragmas","-Wno-long-long","-Wno-unused-parameter","-Wno-unused-const-variable","-Wno-sign-compare","-Wno-unused-but-set-variable","-Wno-unused-variable","-Wno-endif-labels","-Wno-comment"]
     import subprocess
-    p = subprocess.run(["gcc","-g","-fPIC","-shared",c_file_name,"-lcasadi","-L"+GlobalOptions.getCasadiPath(),"-I"+GlobalOptions.getCasadiIncludePath(),"-o"+lib_file_name,"-Wl,-rpath="+GlobalOptions.getCasadiPath()], capture_output=True, text=True)
+    p = subprocess.run(["gcc","-g","-fPIC","-shared",c_file_name,"-lcasadi","-L"+GlobalOptions.getCasadiPath(),"-I"+GlobalOptions.getCasadiIncludePath(),"-o"+lib_file_name,"-Wl,-rpath="+GlobalOptions.getCasadiPath()]+flags, capture_output=True, text=True)
     if p.returncode!=0:
       raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
     # breaks matlab
-    #p = subprocess.run(["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-L"+build_dir_abs,"-o",hello_file_name,"-Wl,-rpath="+build_dir_abs], capture_output=True, text=True)
-    #if p.returncode!=0:
-    #  raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
+    p = subprocess.run(["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-L"+build_dir_abs,"-o",hello_file_name,"-Wl,-rpath="+build_dir_abs]+flags, capture_output=True, text=True)
+    if p.returncode!=0:
+      raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
 
     s_function_name = name+"_s_function_level2"
 
@@ -1346,10 +1333,10 @@ int {prefix}flag_value({prefix}struct* m, int index);
         """)
 
     m_build_file_name = os.path.join(build_dir_abs,"build.m")
-      
     with open(m_build_file_name,"w") as out:
       out.write(f"""
-        mex('-g',['-I{build_dir_abs}'],['-L{build_dir_abs}'],'-l{name}','LDFLAGS="\$LDFLAGS -Wl,-rpath,{build_dir_abs}"', '{s_function_file_name}')
+       
+        mex('-g',['-I{build_dir_abs}'],['-I{GlobalOptions.getCasadiIncludePath()}'],['-L{build_dir_abs}'],['-L{GlobalOptions.getCasadiPath()}'],'-lcasadi','CFLAGS="\$CFLAGS -pedantic -Wextra -std=c89 -Wno-unknown-pragmas -Wno-long-long -Wno-unused-parameter -Wno-unused-const-variable -Wno-sign-compare -Wno-unused-but-set-variable -Wno-unused-variable -Wno-endif-labels -Wno-comment"','LDFLAGS="\$LDFLAGS -Wl,-rpath,{build_dir_abs}"', '{c_file_name}', '{s_function_file_name}')
        """)
 
     shutil.copy(os.path.join(self.basename,"templates","python","impact.py"), os.path.join(build_dir_abs,"impact.py"))
