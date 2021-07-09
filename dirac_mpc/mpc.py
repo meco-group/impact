@@ -1335,8 +1335,12 @@ int {prefix}flag_value({prefix}struct* m, int index);
     m_build_file_name = os.path.join(build_dir_abs,"build.m")
     with open(m_build_file_name,"w") as out:
       out.write(f"""
-       
-        mex('-g',['-I{build_dir_abs}'],['-I{GlobalOptions.getCasadiIncludePath()}'],['-L{build_dir_abs}'],['-L{GlobalOptions.getCasadiPath()}'],'-lcasadi','CFLAGS="\$CFLAGS -pedantic -Wextra -std=c89 -Wno-unknown-pragmas -Wno-long-long -Wno-unused-parameter -Wno-unused-const-variable -Wno-sign-compare -Wno-unused-but-set-variable -Wno-unused-variable -Wno-endif-labels -Wno-comment"','LDFLAGS="\$LDFLAGS -Wl,-rpath,{build_dir_abs}"', '{c_file_name}', '{s_function_file_name}')
+
+        if ispc
+          mex(['-I{build_dir_abs}'],['-I{GlobalOptions.getCasadiIncludePath()}'],['-L{build_dir_abs}'],['-L{GlobalOptions.getCasadiPath()}'],'-lcasadi', '{c_file_name}', '{s_function_file_name}')
+        else
+          mex('-g',['-I{build_dir_abs}'],['-I{GlobalOptions.getCasadiIncludePath()}'],['-L{build_dir_abs}'],['-L{GlobalOptions.getCasadiPath()}'],'-lcasadi','LDFLAGS="\$LDFLAGS -Wl,-rpath,{build_dir_abs}"', '{c_file_name}', '{s_function_file_name}')
+        end
        """)
 
     shutil.copy(os.path.join(self.basename,"templates","python","impact.py"), os.path.join(build_dir_abs,"impact.py"))
