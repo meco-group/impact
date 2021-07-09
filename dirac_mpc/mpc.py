@@ -1155,14 +1155,15 @@ int {prefix}flag_value({prefix}struct* m, int index);
     lib_file_name = os.path.join(build_dir_abs,"lib" + lib_name + ".so")
 
     flags = ["-pedantic","-Wextra","-Wno-unknown-pragmas","-Wno-long-long","-Wno-unused-parameter","-Wno-unused-const-variable","-Wno-sign-compare","-Wno-unused-but-set-variable","-Wno-unused-variable","-Wno-endif-labels","-Wno-comment"]
-    import subprocess
-    p = subprocess.run(["gcc","-g","-fPIC","-shared",c_file_name,"-lcasadi","-L"+GlobalOptions.getCasadiPath(),"-I"+GlobalOptions.getCasadiIncludePath(),"-o"+lib_file_name,"-Wl,-rpath="+GlobalOptions.getCasadiPath()]+flags, capture_output=True, text=True)
-    if p.returncode!=0:
-      raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
-    # breaks matlab
-    p = subprocess.run(["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-L"+build_dir_abs,"-o",hello_file_name,"-Wl,-rpath="+build_dir_abs]+flags, capture_output=True, text=True)
-    if p.returncode!=0:
-      raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
+    if os.name!="nt":
+      import subprocess
+      p = subprocess.run(["gcc","-g","-fPIC","-shared",c_file_name,"-lcasadi","-L"+GlobalOptions.getCasadiPath(),"-I"+GlobalOptions.getCasadiIncludePath(),"-o"+lib_file_name,"-Wl,-rpath="+GlobalOptions.getCasadiPath()]+flags, capture_output=True, text=True)
+      if p.returncode!=0:
+        raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
+      # breaks matlab
+      p = subprocess.run(["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-L"+build_dir_abs,"-o",hello_file_name,"-Wl,-rpath="+build_dir_abs]+flags, capture_output=True, text=True)
+      if p.returncode!=0:
+        raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
 
     s_function_name = name+"_s_function_level2"
 
