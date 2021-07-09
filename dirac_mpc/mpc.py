@@ -273,6 +273,9 @@ class MPC(Ocp):
     build_dir_rel = name+"_build_dir"
     build_dir_abs = os.path.join(os.path.abspath(src_dir),build_dir_rel)
 
+    def escape(e):
+      return e.replace('\\','/')
+
     os.makedirs(build_dir_abs,exist_ok=True)
     # Clean directory (but do not delete it,
     # since this confuses open shells in Linux (e.g. bash, Matlab)
@@ -781,10 +784,10 @@ int {prefix}flag_value({prefix}struct* m, int index);
               m->pop = 0;
             }}
             if (m->id<0) {{
-              flag = casadi_c_push_file("{casadi_file_name}");
+              flag = casadi_c_push_file("{escape(casadi_file_name)}");
               m->pop = 1;
               if (flag) {{
-                m->fatal(m, "initialize", "Could not load file '{casadi_file_name}'.\\n");
+                m->fatal(m, "initialize", "Could not load file '{escape(casadi_file_name)}'.\\n");
                 return 0;
               }}
               m->id = casadi_c_id("{casadi_fun_name}");
@@ -1499,3 +1502,5 @@ plt.show()
     shutil.make_archive(simulink_library_filename,'zip',simulink_library_dirname)
     shutil.move(simulink_library_filename+".zip",simulink_library_filename)
 
+
+    print("success")
