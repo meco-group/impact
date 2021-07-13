@@ -261,7 +261,7 @@ class MPC(Ocp):
       assert "ode" in model_res
       self.set_der(m.x, model_res["ode"])
     if nd["z"]:
-      assert "alg" in res
+      assert "alg" in model_res
       self.add_alg(model_res["alg"])
 
 
