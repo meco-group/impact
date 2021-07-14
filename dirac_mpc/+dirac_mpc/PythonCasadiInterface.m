@@ -32,8 +32,15 @@ classdef PythonCasadiInterface < handle
           end
         end
         function [out,keywords] = matlab2python_arg(obj, v,n_in_min,arg_names)
+          greedy_kwargs_from = inf;
           if n_in_min==-inf
             n_in_min = inf;
+            greedy_kwargs_from = 1;
+            for greedy_kwargs_from=1:numel(v)
+               if strcmp(arg_names{greedy_kwargs_from},'args')
+                   break
+               end
+            end
           end
           assert(length(v)>=n_in_min || isinf(n_in_min))
           keywords_only = false;
@@ -49,6 +56,10 @@ classdef PythonCasadiInterface < handle
             keywords_only = keywords_only || i_v>n_in_min;
             key_or_value = v{i_v};
             isc = ischar(key_or_value);
+            if i_v>=greedy_kwargs_from && isc
+                keywords_only = true;
+                has_kwargs = true;
+            end
             is_kwargs = strcmp(arg_names{i_arg},'kwargs');
             if ~keywords_only && is_kwargs
               keywords_only = true;
