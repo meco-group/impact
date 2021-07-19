@@ -1191,7 +1191,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
         }}
 
         static void mdlInitializeSizes(SimStruct *S) {{
+#ifdef MATLAB_MEX_FILE
             mexPrintf("mdlInitializeSizes\\n");
+#endif
             int i;
             int n_row, n_col;
             const char* id;
@@ -1201,12 +1203,19 @@ int {prefix}flag_value({prefix}struct* m, int index);
             /* Simulink does not provide a cleanup-hook when parameters are changed */
             cleanup();
 
+#ifdef MATLAB_MEX_FILE
             m = {prefix}initialize(mexPrintf);
-
+#else
+            m = {prefix}initialize(0);
+#endif
             if (!m) {{
               cleanup();
+#ifdef MATLAB_MEX_FILE
               mexErrMsgIdAndTxt( "MATLAB:s_function:invalidParameter",
                                 "Failed to initialize.");
+#else
+              return;
+#endif           
             }}
             {prefix}print_problem(m);
 
@@ -1222,8 +1231,12 @@ int {prefix}flag_value({prefix}struct* m, int index);
             if (!ssSetNumInputPorts(S, n_p)) return;
             if (n_p<0) {{
               cleanup();
+#ifdef MATLAB_MEX_FILE
               mexErrMsgIdAndTxt( "MATLAB:s_function:invalidParameter",
                                 "Failure.");
+#else
+              return;
+#endif            
             }}
             for (i=0;i<n_p;++i) {{
               {prefix}get_id_from_index(m, "p", i, &id);
@@ -1269,7 +1282,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
         */
         static void mdlInitializeSampleTimes(SimStruct *S)
         {{
+#ifdef MATLAB_MEX_FILE
             mexPrintf("mdlInitializeSampleTimes\\n");
+#endif
             ssSetSampleTime(S, 0, INHERITED_SAMPLE_TIME);
             ssSetOffsetTime(S, 0, 0.0);
             ssSetModelReferenceSampleTimeDefaultInheritance(S); 
@@ -1278,7 +1293,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
         static void mdlOutputs(SimStruct *S, int_T tid)
         {{
             if (!m) {{
+#ifdef MATLAB_MEX_FILE
               mexPrintf("mdlOutputs (nullptr)\\n");
+#endif
               return;
             }}
             void** p;
@@ -1317,11 +1334,15 @@ int {prefix}flag_value({prefix}struct* m, int index);
         }}
 
         static void mdlStart(SimStruct *S) {{
+#ifdef  MATLAB_MEX_FILE
           mexPrintf("mdlStart\\n");
+#endif
         }}
 
         static void mdlTerminate(SimStruct *S) {{
+#ifdef  MATLAB_MEX_FILE
           mexPrintf("mdlTerminate\\n");
+#endif
           cleanup();
         }}
 
