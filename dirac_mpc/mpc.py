@@ -1,5 +1,5 @@
 from rockit import Ocp
-from casadi import Function, MX, vcat, vvcat, veccat, GlobalOptions, vec
+from casadi import Function, MX, vcat, vvcat, veccat, GlobalOptions, vec, CodeGenerator
 import casadi
 import yaml
 import os
@@ -7,6 +7,8 @@ from collections import OrderedDict
 import shutil
 from zipfile import ZipFile 
 from lxml import etree
+from contextlib import redirect_stdout, redirect_stderr
+import io
 
 dae_keys = {"x": "differential_states", "z": "algebraic_states", "p": "parameters", "u": "controls"}
 dae_rockit = {"x": "state", "z": "algebraic", "p": "parameter", "u": "control"}
@@ -269,7 +271,7 @@ class MPC(Ocp):
     return m
 
 
-  def export(self,name,src_dir="."):
+  def export(self,name,src_dir=".",use_codegen=None):
     build_dir_rel = name+"_build_dir"
     build_dir_abs = os.path.join(os.path.abspath(src_dir),build_dir_rel)
 
@@ -300,6 +302,25 @@ class MPC(Ocp):
     casadi_fun_name = 'ocpfun'
     ocpfun = self.to_function(casadi_fun_name,[states,controls]+parameters,[states,controls])
 
+    casadi_codegen_file_name = os.path.join(build_dir_abs,name+"_codegen.c")
+    if use_codegen is None or use_codegen:
+      options = {}
+      options["with_header"] = True
+      cg = CodeGenerator(name+"_codegen", options)
+      f = io.StringIO()
+      with redirect_stderr(f):
+        cg.add(ocpfun)
+        cg.generate(build_dir_abs+os.sep)
+        data = cg.dump()
+      f.seek(0)
+      if "cannot be code generated" in f.read() or "#error" in data:
+        if use_codegen is None:
+          use_codegen = False
+        else:
+          raise Exception("use_codegen argument was True, but not supported.")
+      else:
+        use_codegen = True
+    print("use_codegen", use_codegen)
     casadi_file_name = os.path.join(build_dir_abs,name+".casadi")
     ocpfun.save(casadi_file_name)
     prefix = "impact_"
@@ -634,12 +655,22 @@ int {prefix}flag_value({prefix}struct* m, int index);
     u_part_stride = [self.nu for u in self.controls]
     x_part_stride = [self.nx for x in self.states]
 
+    def casadi_call(funname,*args):
+      method = f"casadi_c_{funname}_id"
+      if use_codegen:
+        if funname=="eval":
+          method = f"{casadi_fun_name}"
+        else:
+          method = f"{casadi_fun_name}_{funname}"
+      if not use_codegen:
+        args = ("m->id",) + args
+      return method + "(" + ",".join(args) + ")"
 
     with open(c_file_name,"w") as out:
       out.write(f"""
           #include <stdlib.h>
           #include <string.h>          
-          #include <casadi/casadi_c.h>
+          {"#include " + '"' + name + "_codegen.h" + '"' if use_codegen else "#include <casadi/casadi_c.h>"}
           #include "{name}.h"
 
           typedef struct {prefix}_pool {{
@@ -778,7 +809,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
             m->fp = fp;
             m->fatal = {prefix}fatal;
             m->info = {prefix}info;
-            m->id = -1;
+            m->id = -1;""")
+      if not use_codegen:
+        out.write(f"""
             if (casadi_c_n_loaded()) {{ 
               m->id = casadi_c_id("{casadi_fun_name}");
               m->pop = 0;
@@ -796,12 +829,12 @@ int {prefix}flag_value({prefix}struct* m, int index);
                 {prefix}destroy(m);
                 return 0;
               }}
-            }}
-
+            }}""")
+      out.write(f"""
             /* Allocate memory (thread-safe) */
-            casadi_c_incref_id(m->id);
+            {casadi_call("incref")};
             /* Checkout thread-local memory (not thread-safe) */
-            m->mem = casadi_c_checkout_id(m->id);
+            m->mem = {casadi_call("checkout")};
 
             {prefix}work(m, &m->sz_arg, &m->sz_res, &m->sz_iw, &m->sz_w);
             {prefix}set_work(m,
@@ -896,10 +929,10 @@ int {prefix}flag_value({prefix}struct* m, int index);
           void {prefix}destroy({prefix}struct* m) {{
             if (m) {{
               /* Free memory (thread-safe) */
-              casadi_c_decref_id(m->id);
+              {casadi_call("decref")};
               // Release thread-local (not thread-safe)
-              casadi_c_release_id(m->id, m->mem);
-              if (m->pop) casadi_c_pop();
+              {casadi_call("release","m->mem")};
+              {"" if use_codegen else "if (m->pop) casadi_c_pop();"}
               free(m);
             }}
           }}
@@ -912,7 +945,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
           }}
 
           void {prefix}work({prefix}struct* m, casadi_int* sz_arg, casadi_int* sz_res, casadi_int* sz_iw, casadi_int* sz_w) {{
-            casadi_c_work_id(m->id, sz_arg, sz_res, sz_iw, sz_w);
+            {casadi_call("work","sz_arg", "sz_res", "sz_iw", "sz_w")};
             // We might want to be adding other working memory here
           }}
 
@@ -1138,7 +1171,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
             }}
             m->res_casadi[0] = m->x_opt->data;
             m->res_casadi[1] = m->u_opt->data;
-            return casadi_c_eval_id(m->id, m->arg_casadi, m->res_casadi, m->iw_casadi, m->w_casadi, m->mem);
+            return {casadi_call("eval","m->arg_casadi","m->res_casadi","m->iw_casadi","m->w_casadi","m->mem")};
           }}
 
           int {prefix}get_p_by_id({prefix}struct* m, const char* id, const casadi_real* value) {{
@@ -1155,15 +1188,27 @@ int {prefix}flag_value({prefix}struct* m, int index);
     lib_file_name = os.path.join(build_dir_abs,"lib" + lib_name + ".so")
 
     flags = ["-pedantic","-Wextra","-Wno-unknown-pragmas","-Wno-long-long","-Wno-unused-parameter","-Wno-unused-const-variable","-Wno-sign-compare","-Wno-unused-but-set-variable","-Wno-unused-variable","-Wno-endif-labels","-Wno-comment"]
+    deps = ["-L"+build_dir_abs,"-Wl,-rpath="+build_dir_abs]
     if os.name!="nt":
       import subprocess
-      p = subprocess.run(["gcc","-g","-fPIC","-shared",c_file_name,"-lcasadi","-L"+GlobalOptions.getCasadiPath(),"-I"+GlobalOptions.getCasadiIncludePath(),"-o"+lib_file_name,"-Wl,-rpath="+GlobalOptions.getCasadiPath()]+flags, capture_output=True, text=True)
+      if use_codegen:
+        lib_codegen_file_name = os.path.join(build_dir_abs,"lib" + name + "_codegen.so")
+        p = subprocess.run(["gcc","-g","-fPIC","-shared",casadi_codegen_file_name,"-lm","-o"+lib_codegen_file_name]+deps, capture_output=True, text=True)
+        print(" ".join(p.args))
+        if p.returncode!=0:
+          raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
+        deps += ["-l"+name+"_codegen"]
+      else:
+        deps += ["-lcasadi","-L"+GlobalOptions.getCasadiPath(),"-I"+GlobalOptions.getCasadiIncludePath(),"-Wl,-rpath="+GlobalOptions.getCasadiPath()]
+
+      p = subprocess.run(["gcc","-g","-fPIC","-shared",c_file_name,"-o"+lib_file_name]+deps+flags, capture_output=True, text=True)
+      print(" ".join(p.args))
       if p.returncode!=0:
         raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
       # breaks matlab
-      p = subprocess.run(["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-L"+build_dir_abs,"-o",hello_file_name,"-Wl,-rpath="+build_dir_abs]+flags, capture_output=True, text=True)
-      if p.returncode!=0:
-        raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
+      #p = subprocess.run(["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-o",hello_file_name]+deps+flags, capture_output=True, text=True)
+      #if p.returncode!=0:
+      #  raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
 
     s_function_name = name+"_s_function_level2"
 
@@ -1356,14 +1401,22 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
     m_build_file_name = os.path.join(build_dir_abs,"build.m")
     with open(m_build_file_name,"w") as out:
-      out.write(f"""
-
-        if ispc
-          mex(['-I{build_dir_abs}'],['-I{GlobalOptions.getCasadiIncludePath()}'],['-L{build_dir_abs}'],['-L{GlobalOptions.getCasadiPath()}'],'-lcasadi', '{s_function_file_name}', '{c_file_name}')
-        else
-          mex('-g',['-I{build_dir_abs}'],['-I{GlobalOptions.getCasadiIncludePath()}'],['-L{build_dir_abs}'],['-L{GlobalOptions.getCasadiPath()}'],'-lcasadi','LDFLAGS="\$LDFLAGS -Wl,-rpath,{build_dir_abs}"', '{s_function_file_name}')
-        end
-       """)
+      if use_codegen:
+        out.write(f"""
+          if ispc
+            mex(['-I{build_dir_abs}'],['-L{build_dir_abs}'],'{s_function_file_name}', '{c_file_name}', '{casadi_codegen_file_name}')
+          else
+            mex('-g',['-I{build_dir_abs}'],['-L{build_dir_abs}'],'-l{name}','LDFLAGS="\$LDFLAGS -Wl,-rpath,{build_dir_abs}"', '{s_function_file_name}')
+          end
+        """)
+      else:
+        out.write(f"""
+          if ispc
+            mex(['-I{build_dir_abs}'],['-I{GlobalOptions.getCasadiIncludePath()}'],['-L{build_dir_abs}'],['-L{GlobalOptions.getCasadiPath()}'],'-lcasadi', '{s_function_file_name}', '{c_file_name}')
+          else
+            mex('-g',['-I{build_dir_abs}'],['-I{GlobalOptions.getCasadiIncludePath()}'],['-L{build_dir_abs}'],['-L{GlobalOptions.getCasadiPath()}'],'-lcasadi','-l{name}','LDFLAGS="\$LDFLAGS -Wl,-rpath,{build_dir_abs}"', '{s_function_file_name}')
+          end
+        """)
 
     shutil.copy(os.path.join(self.basename,"templates","python","impact.py"), os.path.join(build_dir_abs,"impact.py"))
     py_file_name = os.path.join(build_dir_abs,"hello_world_" + name+".py")
