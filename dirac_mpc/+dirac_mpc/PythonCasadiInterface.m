@@ -36,7 +36,7 @@ classdef PythonCasadiInterface < handle
           if n_in_min==-inf
             n_in_min = inf;
             greedy_kwargs_from = 1;
-            for greedy_kwargs_from=1:numel(v)
+            for greedy_kwargs_from=1:numel(arg_names)
                if strcmp(arg_names{greedy_kwargs_from},'args')
                    break
                end
@@ -186,5 +186,6 @@ classdef PythonCasadiInterface < handle
         end
     end
 end
+
 
 
