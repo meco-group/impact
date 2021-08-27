@@ -1349,9 +1349,10 @@ int {prefix}flag_value({prefix}struct* m, int index);
             casadi_int* iw;
             int_T i;
             const char* id;
-
+            
+#ifdef MATLAB_MEX_FILE
             mexPrintf("mdlOutputs %p\\n", m);
-
+#endif
             /* Set up CasADi function work vectors */
             p = ssGetPWork(S);
             arg = (const real_T**) p;
