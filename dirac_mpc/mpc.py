@@ -270,6 +270,20 @@ class MPC(Ocp):
     self.expr._update({name: m})
     return m
 
+  @staticmethod
+  def patch_codegen(name):
+    import re
+    with open(name,'r') as fin:
+      lines = fin.readlines()
+
+    with open(name,'w') as fout:
+      for line in lines:
+        # Bugfix https://gitlab.kuleuven.be/meco/projects/sbo_dirac/dirac_mpc/-/issues/11
+        if "return fmax(x, y);" not in line and "CASADI_PREFIX" not in line:
+          line = re.sub(r"\bfmax\b","casadi_fmax", line)
+        fout.write(line)
+
+
 
   def export(self,name,src_dir=".",use_codegen=None):
     build_dir_rel = name+"_build_dir"
@@ -320,6 +334,7 @@ class MPC(Ocp):
           raise Exception("use_codegen argument was True, but not supported.")
       else:
         use_codegen = True
+        self.patch_codegen(casadi_codegen_file_name)
     print("use_codegen", use_codegen)
     casadi_file_name = os.path.join(build_dir_abs,name+".casadi")
     ocpfun.save(casadi_file_name)
