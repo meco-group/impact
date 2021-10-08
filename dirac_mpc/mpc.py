@@ -306,6 +306,7 @@ class MPC(Ocp):
         pass
           
     [_,states] = self.sample(self.x,grid='control')
+    [_,algebraics] = self.sample(self.z,grid='control')
     [_,controls] = self.sample(self.u,grid='control-')
     parameters_symbols = self.parameters['']+self.parameters['control']
     parameters = []
@@ -314,7 +315,7 @@ class MPC(Ocp):
     for p in self.parameters['control']:
       parameters.append(self.sample(p,grid='control-')[1])
     casadi_fun_name = 'ocpfun'
-    ocpfun = self.to_function(casadi_fun_name,[states,controls]+parameters,[states,controls])
+    ocpfun = self.to_function(casadi_fun_name,[states,algebraics,controls]+parameters,[states,algebraics,controls])
 
     casadi_codegen_file_name = os.path.join(build_dir_abs,name+"_codegen.c")
     if use_codegen is None or use_codegen:
@@ -344,7 +345,7 @@ class MPC(Ocp):
       return ",".join('"'+e+'"' if isinstance(e,str) else str(e) for e in a)
 
 
-    pool_names = ["x_initial_guess","u_initial_guess","p","x_opt","u_opt"]
+    pool_names = ["x_initial_guess","z_initial_guess","u_initial_guess","p","x_opt","z_opt","u_opt"]
 
     p_offsets = [0]
     for p in parameters:
@@ -352,6 +353,7 @@ class MPC(Ocp):
 
     p_nominal = self._method.opti.value(vvcat(parameters),self._method.opti.initial())
     x_nominal = self._method.opti.value(vec(states),self._method.opti.initial())
+    z_nominal = self._method.opti.value(vec(algebraics),self._method.opti.initial())
     u_nominal = self._method.opti.value(vec(controls),self._method.opti.initial())
 
 
@@ -362,6 +364,7 @@ class MPC(Ocp):
 
     p_names = ['"'+p.name()+'"' for p in self.parameters['']+self.parameters['control']]
     x_names = ['"'+x.name()+'"' for x in self.states]
+    z_names = ['"'+z.name()+'"' for z in self.algebraics]
     u_names = ['"'+u.name()+'"' for u in self.controls]
 
     i_x_current = None
@@ -575,10 +578,10 @@ void {prefix}destroy({prefix}struct* m);
   \\brief Compute an MPC action
 
   \details
-  Parameters (\\b p) and initial guesses (\\b x_initial_guess, \\b u_initial_guess)
+  Parameters (\\b p) and initial guesses (\\b x_initial_guess, \\b u_initial_guess, \\b z_initial_guess)
   can be supplied through \\c get.
   If not supplied, defaults will be taken from the user definition.
-  Outputs of the optimization are written into internal pools \\b x_opt and \\b u_opt,
+  Outputs of the optimization are written into internal pools \\b x_opt, \\b z_opt, and \\b u_opt,
   and can be queried using \\c get. 
 
   \\parameter[in] Impact instance pointer
@@ -657,6 +660,12 @@ int {prefix}flag_value({prefix}struct* m, int index);
       x_part_unit.append(x.numel())
       x_part_offset.append(x_part_offset[-1]+x.numel())
 
+    z_part_offset = [0]
+    z_part_unit = []
+    for z in self.algebraics:
+      z_part_unit.append(z.numel())
+      z_part_offset.append(z_part_offset[-1]+z.numel())
+
     u_part_offset = [0]
     u_part_unit = []
     for u in self.controls:
@@ -667,8 +676,10 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
 
     p_part_stride = p_part_unit
-    u_part_stride = [self.nu for u in self.controls]
     x_part_stride = [self.nx for x in self.states]
+    z_part_stride = [self.nz for x in self.algebraics]
+    u_part_stride = [self.nu for u in self.controls]
+
 
     def casadi_call(funname,*args):
       method = f"casadi_c_{funname}_id"
@@ -726,12 +737,15 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
             {prefix}pool* x_current;
 
-            {prefix}pool* u_initial_guess;
             {prefix}pool* x_initial_guess;
+            {prefix}pool* z_initial_guess;
+            {prefix}pool* u_initial_guess;
             {prefix}pool* p;
 
-            {prefix}pool* u_opt;
+
             {prefix}pool* x_opt;
+            {prefix}pool* z_opt;
+            {prefix}pool* u_opt;
 
             int mem;
 
@@ -885,17 +899,6 @@ int {prefix}flag_value({prefix}struct* m, int index);
             m->x_current->part_unit = {prefix}x_part_unit;
             m->x_current->part_stride = {prefix}x_part_stride;
 
-            m->u_initial_guess = malloc(sizeof({prefix}pool));
-            m->u_initial_guess->names = {prefix}u_names;
-            m->u_initial_guess->size = {u_nominal.size};
-            m->u_initial_guess->data = malloc(sizeof(casadi_real)*{u_nominal.size});
-            m->u_initial_guess->n = {len(self.controls)};
-            m->u_initial_guess->trajectory_length = {prefix}u_trajectory_length;
-            m->u_initial_guess->stride = {self.nu};
-            m->u_initial_guess->part_offset = {prefix}u_part_offset;
-            m->u_initial_guess->part_unit = {prefix}u_part_unit;
-            m->u_initial_guess->part_stride = {prefix}u_part_stride;
-
             m->x_initial_guess = malloc(sizeof({prefix}pool));
             m->x_initial_guess->names = {prefix}x_names;
             m->x_initial_guess->size = {x_nominal.size};
@@ -906,6 +909,28 @@ int {prefix}flag_value({prefix}struct* m, int index);
             m->x_initial_guess->part_offset = {prefix}x_part_offset;
             m->x_initial_guess->part_unit = {prefix}x_part_unit;
             m->x_initial_guess->part_stride = {prefix}x_part_stride;
+
+            m->z_initial_guess = malloc(sizeof({prefix}pool));
+            m->z_initial_guess->names = {prefix}z_names;
+            m->z_initial_guess->size = {z_nominal.size};
+            m->z_initial_guess->data = malloc(sizeof(casadi_real)*{z_nominal.size});
+            m->z_initial_guess->n = {len(self.algebraics)};
+            m->z_initial_guess->trajectory_length = {prefix}z_trajectory_length;
+            m->z_initial_guess->stride = {self.nz};
+            m->z_initial_guess->part_offset = {prefix}z_part_offset;
+            m->z_initial_guess->part_unit = {prefix}z_part_unit;
+            m->z_initial_guess->part_stride = {prefix}z_part_stride;
+
+            m->u_initial_guess = malloc(sizeof({prefix}pool));
+            m->u_initial_guess->names = {prefix}u_names;
+            m->u_initial_guess->size = {u_nominal.size};
+            m->u_initial_guess->data = malloc(sizeof(casadi_real)*{u_nominal.size});
+            m->u_initial_guess->n = {len(self.controls)};
+            m->u_initial_guess->trajectory_length = {prefix}u_trajectory_length;
+            m->u_initial_guess->stride = {self.nu};
+            m->u_initial_guess->part_offset = {prefix}u_part_offset;
+            m->u_initial_guess->part_unit = {prefix}u_part_unit;
+            m->u_initial_guess->part_stride = {prefix}u_part_stride;
 
             m->u_opt = malloc(sizeof({prefix}pool));
             m->u_opt->names = {prefix}u_names;
@@ -931,9 +956,13 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
             memcpy(m->p->data, {prefix}p_nominal, {p_nominal.size}*sizeof(casadi_real));
             memcpy(m->x_initial_guess->data, {prefix}x_nominal, {x_nominal.size}*sizeof(casadi_real));
+            memcpy(m->z_initial_guess->data, {prefix}z_nominal, {z_nominal.size}*sizeof(casadi_real));
             memcpy(m->u_initial_guess->data, {prefix}u_nominal, {u_nominal.size}*sizeof(casadi_real));
             for (i=0;i<{x_nominal.size};++i) {{
               m->x_opt->data[i] = 0;
+            }}
+            for (i=0;i<{z_nominal.size};++i) {{
+              m->z_opt->data[i] = 0;
             }}
             for (i=0;i<{u_nominal.size};++i) {{
               m->u_opt->data[i] = 0;
@@ -971,15 +1000,19 @@ int {prefix}flag_value({prefix}struct* m, int index);
               return m->x_current;
             }} else if (!strcmp(name,"x_initial_guess")) {{
               return m->x_initial_guess;
+            }} else if (!strcmp(name,"z_initial_guess")) {{
+              return m->z_initial_guess;
             }} else if (!strcmp(name,"u_initial_guess")) {{
               return  m->u_initial_guess;
-            }} else if (!strcmp(name,"u_opt")) {{
-              return  m->u_opt;
             }} else if (!strcmp(name,"x_opt")) {{
               return m->x_opt;
+            }} else if (!strcmp(name,"z_opt")) {{
+              return m->z_opt;
+            }} else if (!strcmp(name,"u_opt")) {{
+              return  m->u_opt;
             }} else {{
               m->fatal(m, "get_pool_by_name", "Pool with name '%s' not recognized. \
-                                       Use one of: 'p','x_initial_guess','u_initial_guess','u_opt','x_opt'. \\n", name);
+                                       Use one of: 'p','x_initial_guess','z_initial_guess','u_initial_guess','x_opt','z_opt','u_opt'. \\n", name);
               return 0;
             }}
           }}
@@ -1180,12 +1213,14 @@ int {prefix}flag_value({prefix}struct* m, int index);
           int {prefix}solve({prefix}struct* m) {{
             int i;
             m->arg_casadi[0] = m->x_initial_guess->data;
-            m->arg_casadi[1] = m->u_initial_guess->data;
+            n->arg_casadi[1] = m->z_initial_guess->data;
+            m->arg_casadi[2] = m->u_initial_guess->data;
             for (i=0;i<{len(parameters)};i++) {{
-              m->arg_casadi[2+i] = m->p->data + {prefix}p_offsets[i];
+              m->arg_casadi[3+i] = m->p->data + {prefix}p_offsets[i];
             }}
             m->res_casadi[0] = m->x_opt->data;
-            m->res_casadi[1] = m->u_opt->data;
+            m->res_casadi[1] = m->z_opt->data;
+            m->res_casadi[2] = m->u_opt->data;
             return {casadi_call("eval","m->arg_casadi","m->res_casadi","m->iw_casadi","m->w_casadi","m->mem")};
           }}
 
