@@ -222,6 +222,21 @@ class MPC(Ocp):
         args[key] = v
       nd[key] = var_len
 
+    # Define Outputs
+    outputs = {}
+    definitions = casadi.__dict__
+    locals = dict(m._d)
+    for k,v in m._d.items():
+      if k.startswith(name+"."):
+        locals[k[len(name)+1:]] = v
+    if "outputs" in model_meta:
+      if "inline" in model_meta["outputs"]:
+        for k,v in model_meta["outputs"]["inline"].items():
+          outputs[k] = eval(v,casadi.__dict__,locals)
+    m._register("y", outputs)
+    locals.update(outputs)
+
+
     if "external" in equations:
       model_res = model(**args)
     
@@ -247,18 +262,6 @@ class MPC(Ocp):
         model_res["alg"] = vvcat(alg_ordered)
 
 
-    # Define Outputs
-    outputs = {}
-    definitions = casadi.__dict__
-    locals = dict(m._d)
-    for k,v in m._d.items():
-      if k.startswith(name+"."):
-        locals[k[len(name)+1:]] = v
-    if "outputs" in model_meta:
-      if "inline" in model_meta["outputs"]:
-        for k,v in model_meta["outputs"]["inline"].items():
-          outputs[k] = eval(v,casadi.__dict__,locals)
-    m._register("y", outputs)
     if nd["x"]:
       assert "ode" in model_res
       self.set_der(m.x, model_res["ode"])
@@ -304,7 +307,13 @@ class MPC(Ocp):
           shutil.rmtree(file_path)
       except:
         pass
-          
+    
+    print(self.x)
+    print(self.z)
+    print(self.u)
+
+    print(self.p)
+
     [_,states] = self.sample(self.x,grid='control')
     [_,algebraics] = self.sample(self.z,grid='control')
     [_,controls] = self.sample(self.u,grid='control-')
@@ -315,7 +324,11 @@ class MPC(Ocp):
     for p in self.parameters['control']:
       parameters.append(self.sample(p,grid='control-')[1])
     casadi_fun_name = 'ocpfun'
-    ocpfun = self.to_function(casadi_fun_name,[states,algebraics,controls]+parameters,[states,algebraics,controls])
+    is_coll = False
+    if hasattr(self._method, "Xc"):
+      is_coll = True
+
+    ocpfun = self.to_function(casadi_fun_name,[states]+(["z"] if is_coll else [MX()])+[controls]+parameters,[states,algebraics,controls])
 
     casadi_codegen_file_name = os.path.join(build_dir_abs,name+"_codegen.c")
     if use_codegen is None or use_codegen:
@@ -760,28 +773,34 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
           static const casadi_int {prefix}p_offsets[{len(parameters)+1}] = {{ {strlist(p_offsets)} }};
           static const casadi_int {prefix}x_part_offset[{len(x_part_offset)}] = {{ {strlist(x_part_offset)} }};
+          static const casadi_int {prefix}z_part_offset[{len(z_part_offset)}] = {{ {strlist(z_part_offset)} }};
           static const casadi_int {prefix}u_part_offset[{len(u_part_offset)}] = {{ {strlist(u_part_offset)} }};
           static const casadi_int {prefix}p_part_offset[{len(p_part_offset)}] = {{ {strlist(p_part_offset)} }};
           static const casadi_int {prefix}x_part_unit[{len(x_part_unit)}] = {{ {strlist(x_part_unit)} }};
+          static const casadi_int {prefix}z_part_unit[{len(z_part_unit)}] = {{ {strlist(z_part_unit)} }};
           static const casadi_int {prefix}u_part_unit[{len(u_part_unit)}] = {{ {strlist(u_part_unit)} }};
           static const casadi_int {prefix}p_part_unit[{len(p_part_unit)}] = {{ {strlist(p_part_unit)} }};
 
           static const casadi_int {prefix}x_part_stride[{len(x_part_unit)}] = {{ {strlist(x_part_stride)} }};
+          static const casadi_int {prefix}z_part_stride[{len(z_part_unit)}] = {{ {strlist(z_part_stride)} }};
           static const casadi_int {prefix}u_part_stride[{len(u_part_unit)}] = {{ {strlist(u_part_stride)} }};
           static const casadi_int {prefix}p_part_stride[{len(p_part_unit)}] = {{ {strlist(p_part_stride)} }};
 
           static const char* {prefix}p_names[{len(parameters)}] = {{ {",".join(p_names)} }};
           static const char* {prefix}x_names[{len(self.states)}] = {{ {",".join(x_names)} }};
+          static const char* {prefix}z_names[{len(self.algebraics)}] = {{ {",".join(z_names)} }};
           static const char* {prefix}u_names[{len(self.controls)}] = {{ {",".join(u_names)} }};
 
           static const casadi_int {prefix}p_trajectory_length[{len(parameters)}] = {{ {strlist(p_trajectory_length)} }};
           static const casadi_int {prefix}x_trajectory_length[{len(self.states)}] = {{ {",".join(str(self._method.N+1) for x in self.states)} }};
+          static const casadi_int {prefix}z_trajectory_length[{len(self.algebraics)}] = {{ {",".join(str(self._method.N+1) for x in self.algebraics)} }};
           static const casadi_int {prefix}u_trajectory_length[{len(self.controls)}] = {{ {",".join(str(self._method.N) for u in self.controls)} }};
           static const casadi_int {prefix}x_current_trajectory_length[{len(self.states)}] = {{ {",".join("1" for x in self.states)} }};
 
           static const casadi_real {prefix}p_nominal[{p_nominal.size}] = {{ {",".join("%0.16f" % e for e in p_nominal)} }};
           static const casadi_real {prefix}u_nominal[{u_nominal.size}] = {{ {",".join("%0.16f" % e for e in u_nominal)} }};
           static const casadi_real {prefix}x_nominal[{x_nominal.size}] = {{ {",".join("%0.16f" % e for e in x_nominal)} }};
+          static const casadi_real {prefix}z_nominal[{z_nominal.size}] = {{ {",".join("%0.16f" % e for e in z_nominal)} }};
           static const casadi_real {prefix}x_current_nominal[{x_current_nominal.size}] = {{ {",".join("%0.16f" % e for e in x_current_nominal)} }};
 
           static const char* {prefix}pool_names[{len(pool_names)}] = {{ {strlist(pool_names)} }};
@@ -943,6 +962,17 @@ int {prefix}flag_value({prefix}struct* m, int index);
             m->u_opt->part_unit = {prefix}u_part_unit;
             m->u_opt->part_stride = {prefix}u_part_stride;
 
+            m->z_opt = malloc(sizeof({prefix}pool));
+            m->z_opt->names = {prefix}z_names;
+            m->z_opt->size = {z_nominal.size};
+            m->z_opt->data = malloc(sizeof(casadi_real)*{z_nominal.size});
+            m->z_opt->n = {len(self.algebraics)};
+            m->z_opt->trajectory_length = {prefix}z_trajectory_length;
+            m->z_opt->stride = {self.nz};
+            m->z_opt->part_offset = {prefix}z_part_offset;
+            m->z_opt->part_unit = {prefix}z_part_unit;
+            m->z_opt->part_stride = {prefix}z_part_stride;
+
             m->x_opt = malloc(sizeof({prefix}pool));
             m->x_opt->names = {prefix}x_names;
             m->x_opt->size = {x_nominal.size};
@@ -958,15 +988,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
             memcpy(m->x_initial_guess->data, {prefix}x_nominal, {x_nominal.size}*sizeof(casadi_real));
             memcpy(m->z_initial_guess->data, {prefix}z_nominal, {z_nominal.size}*sizeof(casadi_real));
             memcpy(m->u_initial_guess->data, {prefix}u_nominal, {u_nominal.size}*sizeof(casadi_real));
-            for (i=0;i<{x_nominal.size};++i) {{
-              m->x_opt->data[i] = 0;
-            }}
-            for (i=0;i<{z_nominal.size};++i) {{
-              m->z_opt->data[i] = 0;
-            }}
-            for (i=0;i<{u_nominal.size};++i) {{
-              m->u_opt->data[i] = 0;
-            }}
+            memcpy(m->x_opt->data, {prefix}x_nominal, {x_nominal.size}*sizeof(casadi_real));
+            memcpy(m->z_opt->data, {prefix}z_nominal, {z_nominal.size}*sizeof(casadi_real));
+            memcpy(m->u_opt->data, {prefix}u_nominal, {u_nominal.size}*sizeof(casadi_real));
             return m;
           }}
 
@@ -1213,7 +1237,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
           int {prefix}solve({prefix}struct* m) {{
             int i;
             m->arg_casadi[0] = m->x_initial_guess->data;
-            n->arg_casadi[1] = m->z_initial_guess->data;
+            m->arg_casadi[1] = m->z_initial_guess->data;
             m->arg_casadi[2] = m->u_initial_guess->data;
             for (i=0;i<{len(parameters)};i++) {{
               m->arg_casadi[3+i] = m->p->data + {prefix}p_offsets[i];
@@ -1256,9 +1280,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
       if p.returncode!=0:
         raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
       # breaks matlab
-      #p = subprocess.run(["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-o",hello_file_name]+deps+flags, capture_output=True, text=True)
-      #if p.returncode!=0:
-      #  raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
+      p = subprocess.run(["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-o",hello_file_name]+deps+flags, capture_output=True, text=True)
+      if p.returncode!=0:
+        raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
 
     s_function_name = name+"_s_function_level2"
 
@@ -1340,22 +1364,31 @@ int {prefix}flag_value({prefix}struct* m, int index);
               ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
             }}
 
-            /*{prefix}get_size(m, "x_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
+            {prefix}get_size(m, "x_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
+            ssSetInputPortDirectFeedThrough(S, i, 1);
+            ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
+            i++;
+
+            {prefix}get_size(m, "z_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
             ssSetInputPortDirectFeedThrough(S, i, 1);
             ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
             i++;
 
             {prefix}get_size(m, "u_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
             ssSetInputPortDirectFeedThrough(S, i, 1);
-            ssSetInputPortMatrixDimensions(S, i, n_row, n_col);*/
+            ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
+            i++;
 
-            if (!ssSetNumOutputPorts(S, 2)) return;
+            if (!ssSetNumOutputPorts(S, 3)) return;
 
-            {prefix}get_size(m, "u_opt", IMPACT_ALL, 0, IMPACT_FULL, &n_row, &n_col);
+            {prefix}get_size(m, "x_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
             ssSetOutputPortMatrixDimensions(S, 0, n_row, n_col);
 
-            {prefix}get_size(m, "x_opt", IMPACT_ALL, 1, IMPACT_FULL, &n_row, &n_col);
+            {prefix}get_size(m, "z_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
             ssSetOutputPortMatrixDimensions(S, 1, n_row, n_col);
+
+            {prefix}get_size(m, "u_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
+            ssSetOutputPortMatrixDimensions(S, 2, n_row, n_col);
 
             ssSetNumSampleTimes(S, 1);
             
@@ -1418,14 +1451,19 @@ int {prefix}flag_value({prefix}struct* m, int index);
               {prefix}get_id_from_index(m, "p", i, &id);
               {prefix}set(m, "p", id, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), IMPACT_FULL);
             }}
-            /*{prefix}get_id_from_index(m, "x_current", i, &id);
-            {prefix}set(m, "x_current", id, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), IMPACT_FULL);*/
+            {prefix}set(m, "x_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), IMPACT_FULL);
+            i++;
+            {prefix}set(m, "z_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), IMPACT_FULL);
+            i++;
+            {prefix}set(m, "u_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), IMPACT_FULL);
+            i++;
 
             {prefix}solve(m);
             {prefix}print_problem(m);
 
-            {prefix}get(m, "u_opt", IMPACT_ALL, 0, ssGetOutputPortRealSignal(S, 0), IMPACT_FULL);
-            {prefix}get(m, "x_opt", IMPACT_ALL, 1, ssGetOutputPortRealSignal(S, 1), IMPACT_FULL);
+            {prefix}get(m, "x_opt", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, 0), IMPACT_FULL);
+            {prefix}get(m, "z_opt", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, 1), IMPACT_FULL);
+            {prefix}get(m, "u_opt", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, 2), IMPACT_FULL);
 
         }}
 
@@ -1581,9 +1619,13 @@ plt.show()
     mask_commands = []
     for i,p in enumerate(parameters_symbols):
       mask_commands.append(f"port_label('input',{i+1},'{p.name()}');")
+    mask_commands.append(f"port_label('input',{len(parameters)+1},'x_initial_guess');")
+    mask_commands.append(f"port_label('input',{len(parameters)+2},'z_initial_guess');")
+    mask_commands.append(f"port_label('input',{len(parameters)+3},'u_initial_guess');")
     mask_commands.append(f"disp('IMPACT MPC\\n{name}');")
-    mask_commands.append(f"port_label('output',1,'u_opt @ k=0');")
-    mask_commands.append(f"port_label('output',2,'x_opt @ k=1');")
+    mask_commands.append(f"port_label('output',1,'x_opt');")
+    mask_commands.append(f"port_label('output',2,'z_opt');")
+    mask_commands.append(f"port_label('output',3,'u_opt');")
     mask_commands = "\n".join(mask_commands)
     block = etree.fromstring(f"""
     <Block BlockType="S-Function" Name="S-Function1" SID="{sfun_id}">
