@@ -1347,7 +1347,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
             ssSetNumPWork(S, sz_arg+sz_res);
 
             int n_p = {prefix}get_id_count(m, "p");
-            if (!ssSetNumInputPorts(S, n_p)) return;
+            if (!ssSetNumInputPorts(S, n_p+3)) return;
             if (n_p<0) {{
               cleanup();
 #ifdef MATLAB_MEX_FILE
