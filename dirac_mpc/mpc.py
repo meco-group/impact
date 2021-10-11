@@ -1446,8 +1446,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
             {prefix}set_work(m, arg, res, iw, w);
             
-            /* Point to input and output buffers */  
-            for (i=0; i<ssGetNumInputPorts(S);++i) {{
+            /* Point to input and output buffers */
+            int n_p = {prefix}get_id_count(m, "p"); 
+            for (i=0; i<n_p;++i) {{
               {prefix}get_id_from_index(m, "p", i, &id);
               {prefix}set(m, "p", id, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), IMPACT_FULL);
             }}
