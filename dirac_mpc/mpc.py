@@ -1494,7 +1494,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
       if use_codegen:
         out.write(f"""
           if ispc
-            mex(['-I{build_dir_abs}'],['-L{build_dir_abs}'],'{s_function_file_name}', '{c_file_name}', '{casadi_codegen_file_name}')
+            mex(['-I{build_dir_abs}'],['-I' GlobalOptions.getCasadiIncludePath()],['-L' GlobalOptions.getCasadiPath()],'-losqp',['-L{build_dir_abs}'],'{s_function_file_name}', '{c_file_name}', '{casadi_codegen_file_name}')
           else
             mex('-g',['-I{build_dir_abs}'],['-L{build_dir_abs}'],'-l{name}','LDFLAGS="\$LDFLAGS -Wl,-rpath,{build_dir_abs}"', '{s_function_file_name}')
           end
