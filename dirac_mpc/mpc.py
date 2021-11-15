@@ -295,6 +295,9 @@ class MPC(Ocp):
         if "ocpfun_checkout" in line:
           fout.write(line)
           line = " ".join([e+"();" for e in increfs])
+          
+        if "casadi_int A_colind" in line:
+          line = line.replace("casadi_int","c_int")
         fout.write(line)
 
 
