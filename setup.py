@@ -25,7 +25,7 @@ setup(
         'casadi>=3.5,<4.0',
         'pyyaml',
         'lxml',
-        'rockit-meco',
+        'rockit-meco>=0.1.29',
     ],
     download_url='https://gitlab.kuleuven.be/meco/projects/sbo_dirac/dirac_mpc/-/archive/v%s/dirac-mpc-v%s.tar.gz' % (version, version)
 )
