@@ -66,6 +66,10 @@ class Impact:
         return ret
 
     def set(self, pool_name, id, stage, flags, data):
+        if isinstance(data,int) or  isinstance(data,float):
+          data = np.array([data],dtype=float)
+        elif isinstance(data,list):
+          data = np.array(data,dtype=float)
         shape = self.get_size(pool_name, id, stage, flags)
         if len(data.shape)==1 and 1 in shape:
             pass
