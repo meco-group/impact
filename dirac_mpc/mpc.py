@@ -369,8 +369,19 @@ class MPC(Ocp):
     ocpfun.save(casadi_file_name)
     prefix = "impact_"
 
+    def format_float(e):
+      return "%0.18f" % e
+
     def strlist(a):
-      return ",".join('"'+e+'"' if isinstance(e,str) else str(e) for e in a)
+      elems = []
+      for e in a:
+        if isinstance(e,str):
+          elems.append('"'+e+'"')
+        elif isinstance(e,float):
+          elems.append(format_float(e))
+        else:
+          elems.append(str(e))
+      return ",".join(elems)
 
 
     pool_names = ["x_initial_guess","z_initial_guess","u_initial_guess","p","x_opt","z_opt","u_opt"]
@@ -390,10 +401,10 @@ class MPC(Ocp):
 
 
 
-    p_names = ['"'+p.name()+'"' for p in self.parameters['']+self.parameters['control']]
-    x_names = ['"'+x.name()+'"' for x in self.states]
-    z_names = ['"'+z.name()+'"' for z in self.algebraics]
-    u_names = ['"'+u.name()+'"' for u in self.controls]
+    p_names = [p.name() for p in self.parameters['']+self.parameters['control']]
+    x_names = [x.name() for x in self.states]
+    z_names = [z.name() for z in self.algebraics]
+    u_names = [u.name() for u in self.controls]
 
     i_x_current = None
     count = 0
@@ -527,10 +538,10 @@ class MPC(Ocp):
           impact_solve(m);
 
 
-          // Allocate scratch space for state and control trajectories
+          /* Allocate scratch space for state and control trajectories */
           impact_get_size(m, "u_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
           printf("u_opt dims: %d - %d\\n", n_row, n_col);
-          //u_scratch = malloc(sizeof(double)*n_row*n_col);
+          /* u_scratch = malloc(sizeof(double)*n_row*n_col); */
           u_scratch = malloc(sizeof(double)*n_row);
 
           impact_get_size(m, "x_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
@@ -648,7 +659,7 @@ int {prefix}print_problem({prefix}struct* m);
   \\return Negative number upon failure
 
  */
- /* @{{ **
+ /** @{{ */
 /**
   \\brief Get numerical data
   \\parameter[in] dst          Pointer to a chunk of writable memory.
@@ -705,13 +716,26 @@ int {prefix}flag_value({prefix}struct* m, int index);
       u_part_offset.append(u_part_offset[-1]+u.numel())
 
     p_trajectory_length = [1 for p in self.parameters['']]+[self._method.N for p in self.parameters['control']]
-
+    x_trajectory_length = [self._method.N+1 for x in self.states]
+    z_trajectory_length = [self._method.N+1 for x in self.algebraics]
+    u_trajectory_length = [self._method.N for x in self.controls]
+    x_current_trajectory_length = [1 for x in self.states]
 
     p_part_stride = p_part_unit
     x_part_stride = [self.nx for x in self.states]
     z_part_stride = [self.nz for x in self.algebraics]
     u_part_stride = [self.nu for u in self.controls]
 
+    def array_size(n):
+      if n==0: return 1
+      return n
+
+    def initialize_array(name,n,init):
+      s = name+f"[{array_size(n)}]"
+      if n==0:
+        return s
+      else:
+        return s + " = {" + str(init) + "}"
 
     def casadi_call(funname,*args):
       method = f"casadi_c_{funname}_id"
@@ -786,44 +810,29 @@ int {prefix}flag_value({prefix}struct* m, int index);
             info_fp info;
           }};
 
-          // For printing
+          /* For printing */
           #include <stdio.h>
           #include <stdarg.h>
+""")
+      # Write all data arrays
+      prim = ["x","z","u","p"]
+      def arrays():
+        yield ("p_offsets","casadi_int")
+        for p in prim: yield (f"{p}_part_offset","casadi_int")
+        for p in prim: yield (f"{p}_part_unit","casadi_int")
+        for p in prim: yield (f"{p}_part_stride","casadi_int")
+        for p in prim: yield (f"{p}_names","char*")
+        for p in prim: yield (f"{p}_trajectory_length","casadi_int")
+        yield ("x_current_trajectory_length","casadi_int")
+        for p in prim: yield (f"{p}_nominal","casadi_real")
+        yield ("x_current_nominal","casadi_real")
 
-          static const casadi_int {prefix}p_offsets[{len(parameters)+1}] = {{ {strlist(p_offsets)} }};
-          static const casadi_int {prefix}x_part_offset[{len(x_part_offset)}] = {{ {strlist(x_part_offset)} }};
-          static const casadi_int {prefix}z_part_offset[{len(z_part_offset)}] = {{ {strlist(z_part_offset)} }};
-          static const casadi_int {prefix}u_part_offset[{len(u_part_offset)}] = {{ {strlist(u_part_offset)} }};
-          static const casadi_int {prefix}p_part_offset[{len(p_part_offset)}] = {{ {strlist(p_part_offset)} }};
-          static const casadi_int {prefix}x_part_unit[{len(x_part_unit)}] = {{ {strlist(x_part_unit)} }};
-          static const casadi_int {prefix}z_part_unit[{len(z_part_unit)}] = {{ {strlist(z_part_unit)} }};
-          static const casadi_int {prefix}u_part_unit[{len(u_part_unit)}] = {{ {strlist(u_part_unit)} }};
-          static const casadi_int {prefix}p_part_unit[{len(p_part_unit)}] = {{ {strlist(p_part_unit)} }};
+      for name, data_type in arrays():
+        data = eval(name)
+        out.write(f"          static const {data_type} "+ initialize_array(prefix+name,len(data),strlist(data))+";\n")
 
-          static const casadi_int {prefix}x_part_stride[{len(x_part_unit)}] = {{ {strlist(x_part_stride)} }};
-          static const casadi_int {prefix}z_part_stride[{len(z_part_unit)}] = {{ {strlist(z_part_stride)} }};
-          static const casadi_int {prefix}u_part_stride[{len(u_part_unit)}] = {{ {strlist(u_part_stride)} }};
-          static const casadi_int {prefix}p_part_stride[{len(p_part_unit)}] = {{ {strlist(p_part_stride)} }};
-
-          static const char* {prefix}p_names[{len(parameters)}] = {{ {",".join(p_names)} }};
-          static const char* {prefix}x_names[{len(self.states)}] = {{ {",".join(x_names)} }};
-          static const char* {prefix}z_names[{len(self.algebraics)}] = {{ {",".join(z_names)} }};
-          static const char* {prefix}u_names[{len(self.controls)}] = {{ {",".join(u_names)} }};
-
-          static const casadi_int {prefix}p_trajectory_length[{len(parameters)}] = {{ {strlist(p_trajectory_length)} }};
-          static const casadi_int {prefix}x_trajectory_length[{len(self.states)}] = {{ {",".join(str(self._method.N+1) for x in self.states)} }};
-          static const casadi_int {prefix}z_trajectory_length[{len(self.algebraics)}] = {{ {",".join(str(self._method.N+1) for x in self.algebraics)} }};
-          static const casadi_int {prefix}u_trajectory_length[{len(self.controls)}] = {{ {",".join(str(self._method.N) for u in self.controls)} }};
-          static const casadi_int {prefix}x_current_trajectory_length[{len(self.states)}] = {{ {",".join("1" for x in self.states)} }};
-
-          static const casadi_real {prefix}p_nominal[{p_nominal.size}] = {{ {",".join("%0.16f" % e for e in p_nominal)} }};
-          static const casadi_real {prefix}u_nominal[{u_nominal.size}] = {{ {",".join("%0.16f" % e for e in u_nominal)} }};
-          static const casadi_real {prefix}x_nominal[{x_nominal.size}] = {{ {",".join("%0.16f" % e for e in x_nominal)} }};
-          static const casadi_real {prefix}z_nominal[{z_nominal.size}] = {{ {",".join("%0.16f" % e for e in z_nominal)} }};
-          static const casadi_real {prefix}x_current_nominal[{x_current_nominal.size}] = {{ {",".join("%0.16f" % e for e in x_current_nominal)} }};
-
-          static const char* {prefix}pool_names[{len(pool_names)}] = {{ {strlist(pool_names)} }};
-
+      out.write(f"""
+          static const char* {prefix}pool_names[{array_size(len(pool_names))}] = {{ {strlist(pool_names)} }};
 
           static const char* {prefix}flag_names[{len(flags)}] = {{ {",".join('"%s"' % e for e in flags.keys())} }};
           static int {prefix}flag_values[{len(flags)}] = {{ {",".join("IMPACT_" + e for e in flags.keys())} }};
@@ -1017,7 +1026,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
             if (m) {{
               /* Free memory (thread-safe) */
               {casadi_call("decref")};
-              // Release thread-local (not thread-safe)
+              /* Release thread-local (not thread-safe) */
               {casadi_call("release","m->mem")};
               {"" if use_codegen else "if (m->pop) casadi_c_pop();"}
               free(m);
@@ -1033,7 +1042,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
           void {prefix}work({prefix}struct* m, casadi_int* sz_arg, casadi_int* sz_res, casadi_int* sz_iw, casadi_int* sz_w) {{
             {casadi_call("work","sz_arg", "sz_res", "sz_iw", "sz_w")};
-            // We might want to be adding other working memory here
+            /* We might want to be adding other working memory here */
           }}
 
           const {prefix}pool* {prefix}get_pool_by_name({prefix}struct* m, const char* name) {{
@@ -1110,7 +1119,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
               return -2;
             }}
 
-            // Determine index
+            /* Determine index */
             index = -1;
             if (id!=IMPACT_ALL) {{
               for (i=0;i<p->n;++i) {{
@@ -1156,7 +1165,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
               return -3;
             }}
 
-            // Determine index
+            /* Determine index */
             index = -1;
             if (id!=IMPACT_ALL) {{
               for (i=0;i<p->n;++i) {{
@@ -1667,7 +1676,7 @@ plt.show()
     shutil.make_archive(simulink_library_filename,'zip',simulink_library_dirname)
     shutil.move(simulink_library_filename+".zip",simulink_library_filename)
 
-    flags = ["-pedantic","-Wextra","-Wno-unknown-pragmas","-Wno-long-long","-Wno-unused-parameter","-Wno-unused-const-variable","-Wno-sign-compare","-Wno-unused-but-set-variable","-Wno-unused-variable","-Wno-endif-labels","-Wno-comment"]
+    flags = ["-pedantic","-Wall","-Wextra","-Wno-unknown-pragmas","-Wno-long-long","-Wno-unused-parameter","-Wno-unused-const-variable","-Wno-sign-compare","-Wno-unused-but-set-variable","-Wno-unused-variable","-Wno-endif-labels"]
     deps = ["-L"+build_dir_abs,"-Wl,-rpath="+build_dir_abs,"-L"+GlobalOptions.getCasadiPath(),"-I"+GlobalOptions.getCasadiIncludePath(),"-Wl,-rpath="+GlobalOptions.getCasadiPath()]
     if os.name!="nt":
       print("Compiling")
