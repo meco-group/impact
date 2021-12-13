@@ -827,9 +827,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
         for p in prim: yield (f"{p}_nominal","casadi_real")
         yield ("x_current_nominal","casadi_real")
 
-      for name, data_type in arrays():
-        data = eval(name)
-        out.write(f"          static const {data_type} "+ initialize_array(prefix+name,len(data),strlist(data))+";\n")
+      for array_name, data_type in arrays():
+        data = eval(array_name)
+        out.write(f"          static const {data_type} "+ initialize_array(prefix+array_name,len(data),strlist(data))+";\n")
 
       out.write(f"""
           static const char* {prefix}pool_names[{array_size(len(pool_names))}] = {{ {strlist(pool_names)} }};
