@@ -1513,7 +1513,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
           """)
       else:
         out.write(f"""
-          flags=[flags {{['-lcasadi'}}];
+          flags=[flags {{'-lcasadi'}}];
           """)
       out.write(f"""
       if ispc
