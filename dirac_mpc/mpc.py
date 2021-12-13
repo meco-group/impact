@@ -406,6 +406,15 @@ class MPC(Ocp):
     z_names = [z.name() for z in self.algebraics]
     u_names = [u.name() for u in self.controls]
 
+
+    hello_p_normal_name = None
+    hello_p_normal = None
+    hello_p_normal_nominal = None
+    if self.parameters['']:
+      hello_p_normal = self.parameters[''][-1]
+      hello_p_normal_name = hello_p_normal.name()
+      hello_p_normal_nominal = self._method.opti.value(self.value(hello_p_normal),self._method.opti.initial())
+
     i_x_current = None
     count = 0
 
@@ -524,7 +533,15 @@ class MPC(Ocp):
             printf("Failed to initialize\\n");
             return 1;
           }}
+      """)
+      if hello_p_normal_name:
+        out.write(f"""
+          /* Example: how to set a parameter */
+          double val_{hello_p_normal_name}[{len(hello_p_normal_nominal)}] = {{{strlist(hello_p_normal_nominal)}}};
+          impact_set(m, "p", "{hello_p_normal_name}", IMPACT_EVERYWHERE, val_{hello_p_normal_name}, IMPACT_FULL);
 
+        """)
+      out.write(f"""
           double x0[{x_current_nominal.size}] = {{ {",".join("%0.16f" % e for e in x_current_nominal)} }};
 
           impact_set(m, "x_current", IMPACT_ALL, IMPACT_EVERYWHERE, x0, IMPACT_FULL);
@@ -1535,7 +1552,15 @@ import numpy as np
 from impact import Impact
 
 impact = Impact("{name}",src_dir="..")
+""")
 
+      if hello_p_normal_name:
+        out.write(f"""
+# Example: how to set a parameter
+val_{hello_p_normal_name} = [{strlist(hello_p_normal_nominal)}]
+impact.set("p", "{hello_p_normal_name}", impact.EVERYWHERE, impact.FULL, val_{hello_p_normal_name})
+        """)
+      out.write(f"""
 print("Solve a single OCP (default parameters)")
 impact.solve()
 
