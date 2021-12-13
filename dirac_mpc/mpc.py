@@ -9,6 +9,7 @@ from zipfile import ZipFile
 from lxml import etree
 from contextlib import redirect_stdout, redirect_stderr
 import io
+import numpy as np
 
 dae_keys = {"x": "differential_states", "z": "algebraic_states", "p": "parameters", "u": "controls"}
 dae_rockit = {"x": "state", "z": "algebraic", "p": "parameter", "u": "control"}
@@ -394,10 +395,6 @@ class MPC(Ocp):
     x_nominal = self._method.opti.value(vec(states),self._method.opti.initial())
     z_nominal = self._method.opti.value(vec(algebraics),self._method.opti.initial())
     u_nominal = self._method.opti.value(vec(controls),self._method.opti.initial())
-
-
-
-    np = vvcat(parameters).numel()
 
 
 
