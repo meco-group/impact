@@ -1,6 +1,6 @@
 from dirac_mpc import *
 
-mpc = MPC(T=2.0)
+mpc = MPC()
 
 cart_pendulum = mpc.add_model('cart_pendulum','cart_pendulum_dae.yaml')
 
@@ -11,6 +11,11 @@ print(cart_pendulum.L)
 x_current = mpc.parameter('x_current',cart_pendulum.nx)
 x_final = mpc.parameter('x_final',cart_pendulum.nx)
 weights = mpc.parameter('weights',2)
+
+# Make the time horizon a parameter
+T = mpc.parameter('T')
+mpc.set_value(T,2.0)
+mpc.set_T(T)
 
 # Objectives
 mpc.add_objective(mpc.integral(weights[0]*cart_pendulum.U**2 + weights[1]*100*cart_pendulum.X**2))

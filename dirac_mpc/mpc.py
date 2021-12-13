@@ -396,7 +396,10 @@ class MPC(Ocp):
     z_nominal = self._method.opti.value(vec(algebraics),self._method.opti.initial())
     u_nominal = self._method.opti.value(vec(controls),self._method.opti.initial())
 
-
+    if isinstance(p_nominal,float): p_nominal = np.array([p_nominal])
+    if isinstance(x_nominal,float): x_nominal = np.array([x_nominal])
+    if isinstance(z_nominal,float): z_nominal = np.array([z_nominal])
+    if isinstance(u_nominal,float): u_nominal = np.array([u_nominal])
 
     p_names = [p.name() for p in self.parameters['']+self.parameters['control']]
     x_names = [x.name() for x in self.states]
@@ -411,6 +414,7 @@ class MPC(Ocp):
       hello_p_normal = self.parameters[''][-1]
       hello_p_normal_name = hello_p_normal.name()
       hello_p_normal_nominal = self._method.opti.value(self.value(hello_p_normal),self._method.opti.initial())
+      if isinstance(hello_p_normal_nominal,float): hello_p_normal_nominal = np.array([hello_p_normal_nominal])
 
     i_x_current = None
     count = 0
