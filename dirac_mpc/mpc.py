@@ -696,6 +696,18 @@ int {prefix}set({prefix}struct* m, const char* pool_name, const char* id, int st
 int {prefix}get_size({prefix}struct* m, const char* pool_name, const char* id, int stage, int flags, int* n_row, int* n_col);
 /* @}} */
 
+/**
+  \\brief Get number of (scalarized) differential states
+*/
+int {prefix}get_nx();
+/**
+  \\brief Get number of (scalarized) algebric states
+*/
+int {prefix}get_nz();
+/**
+  \\brief Get number of (scalarized) inputs
+*/
+int {prefix}get_nu();
 
 int {prefix}get_id_count({prefix}struct* m, const char* pool_name);
 int {prefix}get_id_from_index({prefix}struct* m, const char* pool_name, int index, const char** id);
@@ -1166,6 +1178,10 @@ int {prefix}flag_value({prefix}struct* m, int index);
             return 0;
           }}
 
+          int {prefix}get_nx() {{ return {self.nx}; }}
+          int {prefix}get_nz() {{ return {self.nz}; }}
+          int {prefix}get_nu() {{ return {self.nu}; }}
+
           int {prefix}set_get({prefix}struct* m, const char* pool, const char* id, int stage, double* data, int data_flags, char mode) {{
             int i, j, k, index, i_start, i_stop, k_start, k_stop, offset, row, col, stride, data_i;
             const {prefix}pool* p;
@@ -1372,7 +1388,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
             ssSetNumPWork(S, sz_arg+sz_res);
 
             int n_p = {prefix}get_id_count(m, "p");
-            if (!ssSetNumInputPorts(S, n_p+3)) return;
+            if (!ssSetNumInputPorts(S, n_p+{3 if self.nz>0 else 2})) return;
             if (n_p<0) {{
               cleanup();
 #ifdef MATLAB_MEX_FILE
@@ -1392,28 +1408,38 @@ int {prefix}flag_value({prefix}struct* m, int index);
             {prefix}get_size(m, "x_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
             ssSetInputPortDirectFeedThrough(S, i, 1);
             ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
-            i++;
+            i++;""")
 
+      if self.nz>0:
+        out.write(f"""
             {prefix}get_size(m, "z_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
             ssSetInputPortDirectFeedThrough(S, i, 1);
             ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
-            i++;
+            i++;""")
 
+      out.write(f"""
             {prefix}get_size(m, "u_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
             ssSetInputPortDirectFeedThrough(S, i, 1);
             ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
             i++;
 
-            if (!ssSetNumOutputPorts(S, 3)) return;
+            if (!ssSetNumOutputPorts(S, {3 if self.nz>0 else 2})) return;
 
+            i = 0;
             {prefix}get_size(m, "x_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
-            ssSetOutputPortMatrixDimensions(S, 0, n_row, n_col);
+            ssSetOutputPortMatrixDimensions(S, i, n_row, n_col);
+            i++;""")
 
+      if self.nz>0:
+        out.write(f"""
             {prefix}get_size(m, "z_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
-            ssSetOutputPortMatrixDimensions(S, 1, n_row, n_col);
+            ssSetOutputPortMatrixDimensions(S, i, n_row, n_col);
+            i++;""")
 
+      out.write(f"""
             {prefix}get_size(m, "u_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
-            ssSetOutputPortMatrixDimensions(S, 2, n_row, n_col);
+            ssSetOutputPortMatrixDimensions(S, i, n_row, n_col);
+            i++;
 
             ssSetNumSampleTimes(S, 1);
             
@@ -1477,19 +1503,26 @@ int {prefix}flag_value({prefix}struct* m, int index);
               {prefix}get_id_from_index(m, "p", i, &id);
               {prefix}set(m, "p", id, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), IMPACT_FULL);
             }}
-            {prefix}set(m, "x_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), IMPACT_FULL);
-            i++;
-            {prefix}set(m, "z_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), IMPACT_FULL);
-            i++;
-            {prefix}set(m, "u_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), IMPACT_FULL);
-            i++;
+            i = n_p;
+            {prefix}set(m, "x_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i++), IMPACT_FULL);""")
+      if self.nz>0:
+        out.write(f"""
+            {prefix}set(m, "z_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i++), IMPACT_FULL);""")
+
+      out.write(f"""
+            {prefix}set(m, "u_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i++), IMPACT_FULL);
 
             {prefix}solve(m);
             {prefix}print_problem(m);
 
-            {prefix}get(m, "x_opt", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, 0), IMPACT_FULL);
-            {prefix}get(m, "z_opt", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, 1), IMPACT_FULL);
-            {prefix}get(m, "u_opt", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, 2), IMPACT_FULL);
+            i = 0;
+            {prefix}get(m, "x_opt", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);""")
+      if self.nz>0:
+        out.write(f"""
+            {prefix}get(m, "z_opt", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);""")
+
+      out.write(f"""
+            {prefix}get(m, "u_opt", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);
 
         }}
 
@@ -1658,15 +1691,19 @@ plt.show()
     zorder = 8
 
     mask_commands = []
-    for i,p in enumerate(parameters_symbols):
-      mask_commands.append(f"port_label('input',{i+1},'{p.name()}');")
-    mask_commands.append(f"port_label('input',{len(parameters)+1},'x_initial_guess');")
-    mask_commands.append(f"port_label('input',{len(parameters)+2},'z_initial_guess');")
-    mask_commands.append(f"port_label('input',{len(parameters)+3},'u_initial_guess');")
+    k = 0
+    for p in parameters_symbols:
+      mask_commands.append(f"port_label('input',{k+1},'{p.name()}');"); k += 1
+    mask_commands.append(f"port_label('input',{k+1},'x_initial_guess');"); k += 1
+    if self.nz>0:
+      mask_commands.append(f"port_label('input',{k+1},'z_initial_guess');"); k += 1
+    mask_commands.append(f"port_label('input',{k+1},'u_initial_guess');"); k += 1
     mask_commands.append(f"disp('IMPACT MPC\\n{name}');")
-    mask_commands.append(f"port_label('output',1,'x_opt');")
-    mask_commands.append(f"port_label('output',2,'z_opt');")
-    mask_commands.append(f"port_label('output',3,'u_opt');")
+    k = 0
+    mask_commands.append(f"port_label('output',{k+1},'x_opt');"); k += 1
+    if self.nz>0:
+      mask_commands.append(f"port_label('output',{k+1},'z_opt');"); k += 1
+    mask_commands.append(f"port_label('output',{k+1},'u_opt');"); k += 1
     mask_commands = "\n".join(mask_commands)
     block = etree.fromstring(f"""
     <Block BlockType="S-Function" Name="S-Function1" SID="{sfun_id}">
@@ -1702,28 +1739,50 @@ plt.show()
     shutil.make_archive(simulink_library_filename,'zip',simulink_library_dirname)
     shutil.move(simulink_library_filename+".zip",simulink_library_filename)
 
-    flags = ["-pedantic","-Wall","-Wextra","-Wno-unknown-pragmas","-Wno-long-long","-Wno-unused-parameter","-Wno-unused-const-variable","-Wno-sign-compare","-Wno-unused-but-set-variable","-Wno-unused-variable","-Wno-endif-labels"]
-    deps = ["-L"+build_dir_abs,"-Wl,-rpath="+build_dir_abs,"-L"+GlobalOptions.getCasadiPath(),"-I"+GlobalOptions.getCasadiIncludePath(),"-Wl,-rpath="+GlobalOptions.getCasadiPath()]
-    if os.name!="nt":
-      print("Compiling")
-      import subprocess
+
+    make_file_name = os.path.join(build_dir_abs,"Makefile")
+      
+    with open(make_file_name,"w") as out:
+
+      flags = ["-pedantic","-Wall","-Wextra","-Wno-unknown-pragmas","-Wno-long-long","-Wno-unused-parameter","-Wno-unused-const-variable","-Wno-sign-compare","-Wno-unused-but-set-variable","-Wno-unused-variable","-Wno-endif-labels"]
+      deps = ["-L"+build_dir_abs,"-Wl,-rpath="+build_dir_abs,"-L"+GlobalOptions.getCasadiPath(),"-I"+GlobalOptions.getCasadiIncludePath(),"-Wl,-rpath="+GlobalOptions.getCasadiPath()]
       if use_codegen:
         lib_codegen_file_name = os.path.join(build_dir_abs,"lib" + name + "_codegen.so")
-        p = subprocess.run(["gcc","-g","-fPIC","-shared",casadi_codegen_file_name,"-lm","-o"+lib_codegen_file_name]+deps, capture_output=True, text=True)
+        lib_codegen_compile_commands = ["gcc","-g","-fPIC","-shared",casadi_codegen_file_name,"-lm","-o"+lib_codegen_file_name]+deps
+        deps += ["-l"+name+"_codegen","-losqp"] 
+      else:
+        deps += ["-lcasadi"]
+      lib_compile_commands = ["gcc","-g","-fPIC","-shared",c_file_name,"-o"+lib_file_name]+deps+flags
+
+      hello_compile_commands = ["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-o",hello_file_name]+deps+flags
+
+      if os.name!="nt":
+        print("Compiling")
+        import subprocess
+        if use_codegen:
+          p = subprocess.run(lib_codegen_compile_commands, capture_output=True, text=True)
+          print(" ".join(p.args))
+          if p.returncode!=0:
+            raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
+
+        p = subprocess.run(lib_compile_commands, capture_output=True, text=True)
         print(" ".join(p.args))
         if p.returncode!=0:
           raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
-        deps += ["-l"+name+"_codegen","-losqp"]
-      else:
-        deps += ["-lcasadi"]
+        # #breaks matlab
+        p = subprocess.run(hello_compile_commands, capture_output=True, text=True)
+        if p.returncode!=0:
+          raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
 
-      p = subprocess.run(["gcc","-g","-fPIC","-shared",c_file_name,"-o"+lib_file_name]+deps+flags, capture_output=True, text=True)
-      print(" ".join(p.args))
-      if p.returncode!=0:
-        raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
-      # #breaks matlab
-      #p = subprocess.run(["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-o",hello_file_name]+deps+flags, capture_output=True, text=True)
-      #if p.returncode!=0:
-      #  raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
+      print(hello_compile_commands)
+      if use_codegen:
+        out.write(os.path.basename(lib_codegen_file_name) + ": " + os.path.basename(casadi_codegen_file_name) + "\n")
+        out.write("\t"+" ".join(lib_codegen_compile_commands)+"\n\n")
+
+      out.write(os.path.basename(lib_file_name) + ": " + os.path.basename(c_file_name) + "\n")
+      out.write("\t"+" ".join(lib_compile_commands)+"\n\n")
+
+      out.write(os.path.basename(hello_file_name) + ": " + os.path.basename(hello_c_file_name) + "\n")
+      out.write("\t"+" ".join(hello_compile_commands)+"\n\n")
 
     print("success")
