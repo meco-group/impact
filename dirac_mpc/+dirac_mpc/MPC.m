@@ -31,6 +31,16 @@ classdef MPC < rockit.Ocp & rockit.Stage
       end
       varargout = pythoncasadiinterface.python2matlab_ret(res);
     end
+    function varargout = add_function(obj,varargin)
+      global pythoncasadiinterface
+      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,1,{'fun'});
+      if isempty(kwargs)
+        res = obj.parent.add_function(args{:});
+      else
+        res = obj.parent.add_function(args{:},pyargs(kwargs{:}));
+      end
+      varargout = pythoncasadiinterface.python2matlab_ret(res);
+    end
     function varargout = add_model(obj,varargin)
       global pythoncasadiinterface
       [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,2,{'name','file_name'});
@@ -63,6 +73,27 @@ classdef MPC < rockit.Ocp & rockit.Stage
     function out = expr(obj)
       global pythoncasadiinterface
       out = pythoncasadiinterface.python2matlab(obj.parent.expr);
+    end
+    function out = patch_codegen(obj)
+      % staticmethod(function) -> method
+      % 
+      % Convert a function to be a static method.
+      % 
+      % A static method does not receive an implicit first argument.
+      % To declare a static method, use this idiom:
+      % 
+      %      class C:
+      %          @staticmethod
+      %          def f(arg1, arg2, ...):
+      %              ...
+      % 
+      % It can be called either on the class (e.g. C.f()) or on an instance
+      % (e.g. C().f()).  The instance is ignored except for its class.
+      % 
+      % Static methods in Python are similar to those found in Java or C++.
+      % For a more advanced concept, see the classmethod builtin.
+      global pythoncasadiinterface
+      out = pythoncasadiinterface.python2matlab(obj.parent.patch_codegen);
     end
   end
 end

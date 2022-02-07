@@ -49,6 +49,14 @@ mpc.set_initial(cart_pendulum.x, 1.13)
 # Make it concrete for this ocp
 mpc.method(DirectCollocation(N=50))
 
+# Demonstrate how to export helper functions
+import casadi as cs
+x = cs.MX.sym("x")
+y = cs.MX.sym("y",3)
+z = cs.MX.sym("z",3,3)
+foo = cs.Function("foo",[x,y,z],[2*x,x*y,z@y+x],['x','y','z'],['foo','bar','baz'])
+mpc.add_function(foo) # Becomes available in library*.slx
+
 mpc.export("cart_pendulum_dae")
 
 

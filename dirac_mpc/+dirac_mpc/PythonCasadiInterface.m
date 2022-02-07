@@ -154,7 +154,7 @@ classdef PythonCasadiInterface < handle
               elseif isscalar(e)
                 out = e;
               else
-                out = py.numpy.array(py.memoryview(e));
+                out = py.numpy.array(py.memoryview(e(:)'));
               end
           elseif isstruct(e)
               names = fieldnames(e);

@@ -120,11 +120,295 @@ class Model(DotDict):
       self._update({'n'+key: s._numel},allow_keyword=True)
       return s
 
+def fun2s_function(fun, name=None, dir="."):
+    fun_name = fun.name()
+    if name is None:
+      name = fun_name
+    s_function_name = name+"_s_function_level2"
+    cg_options = {"casadi_real": "real_T", "casadi_int": "int_T"}
+    cg = CodeGenerator(name, cg_options)
+    cg.add(fun)
+    code = cg.dump()
+    for i in range(fun.n_in()):
+      if not fun.sparsity_in(i).is_dense():
+        raise Exception("Dense inputs not supported")
+    for i in range(fun.n_out()):
+      if not fun.sparsity_out(i).is_dense():
+        raise Exception("Dense outputs not supported")
+
+    s_function_file_name_base = s_function_name+".c"
+    s_function_file_name = os.path.join(dir,s_function_file_name_base)
+
+    with open(s_function_file_name,"w") as out:
+      out.write(f"""
+        #define S_FUNCTION_NAME {s_function_name}
+        #define S_FUNCTION_LEVEL 2
+
+        #include "simstruc.h"
+        {code}
+
+        static int_T n_in, n_out;
+        static int_T sz_arg, sz_res, sz_iw, sz_w;
+
+        static void mdlInitializeSizes(SimStruct *S) {{
+          ssSetNumSFcnParams(S, 0);
+          if (ssGetNumSFcnParams(S) != ssGetSFcnParamsCount(S)) {{
+              return; /* Parameter mismatch will be reported by Simulink */
+          }}
+
+        /* Read in CasADi function dimensions */
+        n_in  = {fun_name}_n_in();
+        n_out = {fun_name}_n_out();
+        {fun_name}_work(&sz_arg, &sz_res, &sz_iw, &sz_w);
+        
+        /* Set up simulink input/output ports */
+        int_T i;
+        if (!ssSetNumInputPorts(S, n_in)) return;
+        for (i=0;i<n_in;++i) {{
+          const int_T* sp = {fun_name}_sparsity_in(i);
+          /* Dense inputs assumed here */
+          ssSetInputPortDirectFeedThrough(S, i, 1);
+          ssSetInputPortMatrixDimensions(S, i, sp[0], sp[1]);
+        }}
+
+        if (!ssSetNumOutputPorts(S, n_out)) return;
+        for (i=0;i<n_out;++i) {{
+          const int_T* sp = {fun_name}_sparsity_out(i);
+          /* Dense outputs assumed here */
+          ssSetOutputPortMatrixDimensions(S, i, sp[0], sp[1]);
+        }}
+
+        ssSetNumSampleTimes(S, 1);
+        
+        /* Set up CasADi function work vector sizes */
+        ssSetNumRWork(S, sz_w);
+        ssSetNumIWork(S, sz_iw);
+        ssSetNumPWork(S, sz_arg+sz_res);
+        ssSetNumNonsampledZCs(S, 0);
+
+        /* specify the sim state compliance to be same as a built-in block */
+        ssSetSimStateCompliance(S, USE_DEFAULT_SIM_STATE);
+
+        ssSetOptions(S,
+                    SS_OPTION_EXCEPTION_FREE_CODE |
+                    SS_OPTION_USE_TLC_WITH_ACCELERATOR);
+
+        /* Signal that we want to use the CasADi Function */
+        {fun_name}_incref();
+        }}
+
+        /* Function: mdlInitializeSampleTimes =========================================
+        * Abstract:
+        *    Specifiy that we inherit our sample time from the driving block.
+        */
+        static void mdlInitializeSampleTimes(SimStruct *S)
+        {{
+            ssSetSampleTime(S, 0, INHERITED_SAMPLE_TIME);
+            ssSetOffsetTime(S, 0, 0.0);
+            ssSetModelReferenceSampleTimeDefaultInheritance(S); 
+        }}
+
+        static void mdlOutputs(SimStruct *S, int_T tid)
+        {{
+
+          /* Set up CasADi function work vectors */
+          void** p = ssGetPWork(S);
+          const real_T** arg = (const real_T**) p;
+          p += sz_arg;
+          real_T** res = (real_T**) p;
+          real_T* w = ssGetRWork(S);
+          int_T* iw = ssGetIWork(S);
+          
+          
+          /* Point to input and output buffers */
+          int_T i;   
+          for (i=0; i<n_in;++i) {{
+            arg[i] = *ssGetInputPortRealSignalPtrs(S,i);
+          }}
+          for (i=0; i<n_out;++i) {{
+            res[i] = ssGetOutputPortRealSignal(S,i);
+          }}
+
+          /* Get a hold on a location to read/write persistant internal memory
+          */
+
+          int mem = {fun_name}_checkout();
+
+          /* Run the CasADi function */
+          {fun_name}(arg,res,iw,w,mem);
+
+          /* Release hold */
+          {fun_name}_release(mem);
+
+        }}
+
+        static void mdlTerminate(SimStruct *S) {{
+          {fun_name}_decref();
+        }}
+
+
+        #ifdef  MATLAB_MEX_FILE    /* Is this file being compiled as a MEX-file? */
+        #include "simulink.c"      /* MEX-file interface mechanism */
+        #else
+        #include "cg_sfun.h"       /* Code generation registration function */
+        #endif
+        """)
+    return s_function_file_name_base
+
+
+class Diagram:
+  def __init__(self,template,simulink_library_name,simulink_library_dirname=None):
+    self.masks = []
+    self.template = template
+    self.simulink_library_name = simulink_library_name
+    self.simulink_library_dirname = simulink_library_dirname
+    self.simulink_library_filename = simulink_library_dirname+".slx"
+    self.next_id = 1
+
+  def add(self,mask):
+    mask.register(self.next_id)
+    self.next_id = mask.max_id
+    self.masks.append(mask)
+
+  def write(self):
+    with ZipFile(self.template) as zipfile:
+      zipfile.extractall(path=self.simulink_library_dirname)
+    blockdiagram_filename = os.path.join(self.simulink_library_dirname,"simulink","blockdiagram.xml")
+    with open(blockdiagram_filename,'r') as blockdiagram_file:
+      tree = etree.parse(blockdiagram_file)
+
+    system = tree.find('.//System')
+    for e in system.findall('Block'):
+      system.remove(e)
+    for e in system.findall('Line'):
+      system.remove(e)
+
+
+    height_spacing = 100
+    max_width = 1920
+    offset_x = 0
+    offset_y = 0
+    height = 0
+    max_id = 0
+    for m in self.masks:
+      # Overflow
+      if offset_x+m.width>max_width and offset_x>0:
+        offset_y += height+height_spacing
+        offset_x = 0
+      else:
+        offset_x += m.width
+        height = max(height, m.height)
+      m.write(system,offset_left = offset_x, offset_top=offset_y)
+      max_id = max(max_id, m.max_id)
+
+    highwater = system.find('P[@Name="SIDHighWatermark"]')
+    highwater.text = str(max_id)
+
+    tree.write(blockdiagram_filename)
+    shutil.make_archive(self.simulink_library_filename,'zip',self.simulink_library_dirname)
+    shutil.move(self.simulink_library_filename+".zip",self.simulink_library_filename)
+
+
+class Mask:
+  def __init__(self,s_function, port_labels_in=None, port_labels_out=None, name=None, port_in=None,port_out=None):
+    self.s_function = s_function
+    self.port_labels_in = port_labels_in
+    self.port_labels_out = port_labels_out
+    if port_in is None:
+      port_in = []
+    self.port_in = port_in
+    self.name = name
+    self.stride_height  = 40
+    self.padding_height = 10
+    self.unit_height  = 40
+
+    self.margin_left = 100
+    self.margin_top = 100
+
+    self.constant_width = 30
+    self.constant_height = 30
+
+    self.line_width = 100
+    self.sfun_width = 200
+    self.sfun_height = self.stride_height*max(len(self.port_labels_in),len(self.port_labels_out))
+
+    self.constant_height_offset = 5
+    self.zorder = 7
+
+    mask_commands = []
+    for k,e in enumerate(self.port_labels_in):
+      mask_commands.append(f"port_label('input',{k+1},'{e}');")
+    mask_commands.append(f"disp('{self.name}');")
+    for k,e in enumerate(self.port_labels_out):
+      mask_commands.append(f"port_label('output',{k+1},'{e}');")
+
+    self.mask_commands = "\n".join(mask_commands)
+  def register(self, base):
+    num_elem = len(self.port_in)+2
+    self.base_id = base
+    self.max_id = self.base_id+num_elem
+
+  @property
+  def width(self):
+    return self.sfun_width+self.constant_width+self.line_width
+  @property
+  def height(self):
+    return self.sfun_height
+
+  def write(self,system,offset_left=0,offset_top=0):
+    margin_left = self.margin_left+offset_left
+    margin_top = self.margin_top+offset_top
+
+    sfun_margin_left = margin_left+self.constant_width+self.line_width
+    sfun_margin_top = margin_top
+
+    block = etree.fromstring(f"""
+    <Block BlockType="S-Function" Name="S-Function{self.base_id}" SID="{self.base_id}">
+      <P Name="Ports">[{len(self.port_labels_in)}, {len(self.port_labels_out)}]</P>
+      <P Name="Position">[{sfun_margin_left}, {sfun_margin_top}, {sfun_margin_left+self.sfun_width}, {sfun_margin_top+self.sfun_height}]</P>
+      <P Name="ZOrder">{self.zorder}</P>
+      <P Name="FunctionName">{self.s_function}</P>
+      <P Name="SFunctionDeploymentMode">off</P>
+      <P Name="EnableBusSupport">off</P>
+      <P Name="SFcnIsStateOwnerBlock">off</P>
+      <Object PropName="MaskObject" ObjectID="{self.base_id+7}" ClassName="Simulink.Mask">
+        <P Name="Display" Class="char">{self.mask_commands}</P>
+      </Object>
+    </Block>
+    """)
+    system.append(block)
+
+    for i, (default, label) in enumerate(zip(self.port_in,self.port_labels_in)):
+      id = self.base_id+i+2
+      if default is None: continue
+      zorder = 7
+      block = etree.fromstring(f"""
+      <Block BlockType="Constant" Name="Constant{id}" SID="{id}">
+        <P Name="Position">[{margin_left}, {margin_top+i*self.stride_height+self.constant_height_offset}, {margin_left+self.constant_width}, {margin_top+self.constant_height+i*self.stride_height+self.constant_height_offset}]</P>
+        <P Name="ZOrder">{zorder}</P>
+        <P Name="Value">{default}</P>
+        <P Name="VectorParams1D">off</P>
+      </Block>
+      """)
+      system.append(block)
+
+      block = etree.fromstring(f"""
+      <Line>
+        <P Name="ZOrder">1</P>
+        <P Name="Src">{id}#out:1</P>
+        <P Name="Dst">{self.base_id}#in:{i+1}</P>
+      </Line>
+      """)
+      system.append(block)
+
+
+
 class MPC(Ocp):
   def __init__(self, **kwargs):
     Ocp.__init__(self, **kwargs)
     self._expr = Model()
     self.basename = os.path.dirname(__file__)
+    self._added_functions = []
 
   @property
   def expr(self):
@@ -135,6 +419,9 @@ class MPC(Ocp):
     self.register_parameter(p,**kwargs)
     self.expr._register('p', {name: p})
     return p
+
+  def add_function(self, fun):
+    self._added_functions.append(fun)
 
   def add_model(self,name,file_name):
     # Read meta information
@@ -1450,7 +1737,6 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
             /* Make sure mdlTerminate is called on error */
             ssSetOptions(S,
-                        SS_OPTION_WORKS_WITH_CODE_REUSE |
                         SS_OPTION_EXCEPTION_FREE_CODE |
                         SS_OPTION_USE_TLC_WITH_ACCELERATOR);
         }}
@@ -1547,6 +1833,11 @@ int {prefix}flag_value({prefix}struct* m, int index);
         #endif
         """)
 
+    # Export helper functions
+    added_functions = []
+    for fun in self._added_functions:
+      added_functions.append(fun2s_function(fun, dir=build_dir_abs))
+
     m_build_file_name = os.path.join(build_dir_abs,"build.m")
     with open(m_build_file_name,"w") as out:
       out.write(f"""
@@ -1571,7 +1862,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
       else
         flags=[flags {{'-g' ['LDFLAGS=\"\$LDFLAGS -Wl,-rpath,' casadi.GlobalOptions.getCasadiPath() ' -Wl,-rpath,' build_dir '\"']}}];
       end
-      mex(flags{{:}},files{{:}});""")
+      mex(flags{{:}},files{{:}});\n""")
+      for f_name in added_functions:
+        out.write(f"mex(flags{{:}}, [build_dir filesep '{f_name}']);\n")
 
     shutil.copy(os.path.join(self.basename,"templates","python","impact.py"), os.path.join(build_dir_abs,"impact.py"))
     py_file_name = os.path.join(build_dir_abs,"hello_world_" + name+".py")
@@ -1644,100 +1937,31 @@ plt.show()
     simulink_library_filename = simulink_library_dirname+".slx"
 
     template = os.path.join(self.basename,"templates","simulink","lib2016b.slx")
-    with ZipFile(template) as zipfile:
-      zipfile.extractall(path=simulink_library_dirname)
-    blockdiagram_filename = os.path.join(simulink_library_dirname,"simulink","blockdiagram.xml")
-    with open(blockdiagram_filename,'r') as blockdiagram_file:
-      tree = etree.parse(blockdiagram_file)
+    diag = Diagram(template,simulink_library_filename,simulink_library_dirname=simulink_library_dirname)
 
-    system = tree.find('.//System')
-    for e in system.findall('Block'):
-      system.remove(e)
-    for e in system.findall('Line'):
-      system.remove(e)
-    highwater = system.find('P[@Name="SIDHighWatermark"]')
-    highwater.text = str(len(parameters))
-
-    stride_height  = 40
-    padding_height = 10
-    unit_height  = 40
-
-    margin_left = 100
-    margin_top = 100
-
-    constant_width = 30
-    constant_height = 30
-
-    line_width = 100
-    sfun_width = 200
-
-    constant_height_offset = 5
-
-
-    for i,p in enumerate(parameters):
-      id = i+2
-      zorder = 7
-      value = f"NaN({p.shape[0]},{p.shape[1]})"
-      block = etree.fromstring(f"""
-    <Block BlockType="Constant" Name="Constant" SID="{id}">
-      <P Name="Position">[{margin_left}, {margin_top+i*stride_height+constant_height_offset}, {margin_left+constant_width}, {margin_top+constant_height+i*stride_height+constant_height_offset}]</P>
-      <P Name="ZOrder">{zorder}</P>
-      <P Name="Value">{value}</P>
-      <P Name="VectorParams1D">off</P>
-    </Block>
-    """)
-      system.append(block)
-    sfun_id = i+3
-    zorder = 8
-
-    mask_commands = []
-    k = 0
+    port_labels_in = []
     for p in parameters_symbols:
-      mask_commands.append(f"port_label('input',{k+1},'{p.name()}');"); k += 1
-    mask_commands.append(f"port_label('input',{k+1},'x_initial_guess');"); k += 1
+      port_labels_in.append(p.name())
+    port_labels_in.append('x_initial_guess')
+
     if self.nz>0:
-      mask_commands.append(f"port_label('input',{k+1},'z_initial_guess');"); k += 1
-    mask_commands.append(f"port_label('input',{k+1},'u_initial_guess');"); k += 1
-    mask_commands.append(f"disp('IMPACT MPC\\n{name}');")
-    k = 0
-    mask_commands.append(f"port_label('output',{k+1},'x_opt');"); k += 1
+      port_labels_in.append('z_initial_guess')
+    port_labels_in.append('u_initial_guess')
+    mask_name = f"IMPACT MPC\\n{name}"
+    port_labels_out = []
+    port_labels_out.append("x_opt")
     if self.nz>0:
-      mask_commands.append(f"port_label('output',{k+1},'z_opt');"); k += 1
-    mask_commands.append(f"port_label('output',{k+1},'u_opt');"); k += 1
-    mask_commands = "\n".join(mask_commands)
-    block = etree.fromstring(f"""
-    <Block BlockType="S-Function" Name="S-Function1" SID="{sfun_id}">
-      <P Name="Ports">[{len(parameters)}, 2]</P>
-      <P Name="Position">[{margin_left+constant_width+line_width}, {margin_top}, {margin_left+constant_width+line_width+sfun_width}, {margin_top+len(parameters)*stride_height}]</P>
-      <P Name="ZOrder">{zorder}</P>
-      <P Name="FunctionName">{s_function_name}</P>
-      <P Name="SFunctionDeploymentMode">off</P>
-      <P Name="EnableBusSupport">off</P>
-      <P Name="SFcnIsStateOwnerBlock">off</P>
-      <Object PropName="MaskObject" ObjectID="7" ClassName="Simulink.Mask">
-        <P Name="Display" Class="char">{mask_commands}</P>
-      </Object>
-    </Block>
-    """)
-    system.append(block)
-
-    for i,p in enumerate(parameters):
-      id = i+2
-      zorder = 7
-      value = f"NaN({p.shape[0]},{p.shape[1]})"
-      block = etree.fromstring(f"""
-      <Line>
-        <P Name="ZOrder">1</P>
-        <P Name="Src">{id}#out:1</P>
-        <P Name="Dst">{sfun_id}#in:{i+1}</P>
-      </Line>
-      """)
-      system.append(block)
-
-
-    tree.write(blockdiagram_filename)
-    shutil.make_archive(simulink_library_filename,'zip',simulink_library_dirname)
-    shutil.move(simulink_library_filename+".zip",simulink_library_filename)
+      port_labels_out.append("z_opt")
+    port_labels_out.append("u_opt")
+    port_in = []
+    for p in parameters_symbols:
+      port_in.append(f"NaN({p.shape[0]},{p.shape[1]})")
+    mask = Mask(port_labels_in=port_labels_in, port_labels_out=port_labels_out,port_in=port_in,name=mask_name,s_function=s_function_name)
+    diag.add(mask)
+    for name,fun in zip(added_functions,self._added_functions):
+      mask = Mask(port_labels_in=fun.name_in(), port_labels_out=fun.name_out(), name=fun.name(), s_function=name[:-2])
+      diag.add(mask)
+    diag.write()
 
 
     make_file_name = os.path.join(build_dir_abs,"Makefile")
