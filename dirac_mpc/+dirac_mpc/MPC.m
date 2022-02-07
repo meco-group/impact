@@ -42,8 +42,10 @@ classdef MPC < rockit.Ocp & rockit.Stage
       varargout = pythoncasadiinterface.python2matlab_ret(res);
     end
     function varargout = export(obj,varargin)
+
+    varargin = [varargin {'context','matlab'}];
       global pythoncasadiinterface
-      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,1,{'name','src_dir','use_codegen'});
+      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,1,{'name','src_dir','use_codegen','context'});
       if isempty(kwargs)
         res = obj.parent.export(args{:});
       else

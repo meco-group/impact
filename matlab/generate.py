@@ -12,4 +12,8 @@ callback_post[r"MPC\.export"] = f"""
     run('build.m');
     cd(current);
 """
-python_matlab.generate(dirac_mpc,exclude=exclude,custom=custom,callback_post=callback_post)
+callback_pre = {}
+callback_pre[r"MPC\.export"] = f"""
+    varargin = [varargin {{'context','matlab'}}];
+"""
+python_matlab.generate(dirac_mpc,exclude=exclude,custom=custom,callback_post=callback_post,callback_pre=callback_pre)

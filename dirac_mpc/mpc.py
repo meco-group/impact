@@ -303,7 +303,7 @@ class MPC(Ocp):
 
 
 
-  def export(self,name,src_dir=".",use_codegen=None):
+  def export(self,name,src_dir=".",use_codegen=None,context=None):
     build_dir_rel = name+"_build_dir"
     build_dir_abs = os.path.join(os.path.abspath(src_dir),build_dir_rel)
 
@@ -1770,9 +1770,10 @@ plt.show()
         if p.returncode!=0:
           raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
         # #breaks matlab
-        p = subprocess.run(hello_compile_commands, capture_output=True, text=True)
-        if p.returncode!=0:
-          raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
+        if context!="matlab":
+          p = subprocess.run(hello_compile_commands, capture_output=True, text=True)
+          if p.returncode!=0:
+            raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
 
       print(hello_compile_commands)
       if use_codegen:
