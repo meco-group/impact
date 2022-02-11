@@ -631,6 +631,58 @@ class MPC(Ocp):
 
     casadi_codegen_file_name_base = name+"_codegen.c"
     casadi_codegen_file_name = os.path.join(build_dir_abs,casadi_codegen_file_name_base)
+
+
+    if self.nz>0:
+      sim = self.sys_simulator(intg="collocation",intg_options={"simplify":True,"rootfinder":"fast_newton"})
+    else:
+      sim = self.sys_simulator(intg="rk")
+    sim_args = {}
+    args = []
+    label_in = []
+    args.append(self.x)
+    label_in.append("x")
+    sim_args["x"] = self.x
+
+    args.append(self.u)
+    label_in.append("u")
+    sim_args["u"] = self.u
+    sim_p = []
+    for p,appearing in zip(parameters_symbols,self.is_parameter_appearing_in_sys()):
+      if appearing:
+        args.append(p)
+        sim_p.append(p)
+    sim_p = vvcat(sim_p)
+    sim_args["p"] = sim_p
+
+    if self.is_sys_time_varying():
+      args.append(self.t)
+      label_in.append("t")
+      sim_args["t0"] = self.t
+    dt = MX.sym("dt")
+    args.append(dt)
+    label_in.append("dt")
+    sim_args["dt"] = dt
+
+
+
+    if self.nz>0:
+      z_initial_guess = MX.sym("z_initial_guess",self.nz)
+      args.append(z_initial_guess)
+      label_in.append("z_initial_guess")
+      sim_args["z_initial_guess"] = z_initial_guess
+
+    sim_out = sim(**sim_args)
+    outs = [sim_out["xf"]]
+    labels_out = ["xf"]
+    if self.nz>0:
+      outs.append(sim_out["zf"])
+      labels_out.append("zf")
+    
+    mysim = Function('integrate_MPC_plant_model', args, outs, label_in, labels_out)
+
+    self.add_function(mysim)
+
     if use_codegen is None or use_codegen:
       options = {}
       options["with_header"] = True
