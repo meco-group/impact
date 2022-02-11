@@ -131,10 +131,10 @@ def fun2s_function(fun, name=None, dir="."):
     code = cg.dump()
     for i in range(fun.n_in()):
       if not fun.sparsity_in(i).is_dense():
-        raise Exception("Dense inputs not supported")
+        raise Exception("Sparse inputs not supported")
     for i in range(fun.n_out()):
       if not fun.sparsity_out(i).is_dense():
-        raise Exception("Dense outputs not supported")
+        raise Exception("Sparse outputs not supported")
 
     s_function_file_name_base = s_function_name+".c"
     s_function_file_name = os.path.join(dir,s_function_file_name_base)
@@ -198,10 +198,6 @@ def fun2s_function(fun, name=None, dir="."):
         {fun_name}_incref();
         }}
 
-        /* Function: mdlInitializeSampleTimes =========================================
-        * Abstract:
-        *    Specifiy that we inherit our sample time from the driving block.
-        */
         static void mdlInitializeSampleTimes(SimStruct *S)
         {{
             ssSetSampleTime(S, 0, INHERITED_SAMPLE_TIME);
