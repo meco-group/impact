@@ -605,7 +605,7 @@ class MPC(Ocp):
         fout.write(line)
 
 
-  def export(self,name,src_dir=".",use_codegen=None,context=None):
+  def export(self,name,src_dir=".",use_codegen=None,context=None,ignore_errors=False):
     build_dir_rel = name+"_build_dir"
     build_dir_abs = os.path.join(os.path.abspath(src_dir),build_dir_rel)
 
@@ -1873,7 +1873,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
             int_T ret = impact_solve(m);
             impact_print_problem(m);
-            if (ret) {{
+            if (ret && {int(not ignore_errors)}) {{
                 static char msg[{100+len(s_function_name)}];
                 sprintf(msg, "SFunction '{s_function_name}' failed to compute (error code %d) at t=%.6fs.", ret, ssGetT(S));
                 ssSetLocalErrorStatus(S, msg);
