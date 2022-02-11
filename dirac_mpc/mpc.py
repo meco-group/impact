@@ -169,6 +169,7 @@ def fun2s_function(fun, name=None, dir="."):
           /* Dense inputs assumed here */
           ssSetInputPortDirectFeedThrough(S, i, 1);
           ssSetInputPortMatrixDimensions(S, i, sp[0], sp[1]);
+          ssSetInputPortRequiredContiguous(S, i, 1);
         }}
 
         if (!ssSetNumOutputPorts(S, n_out)) return;
@@ -223,7 +224,7 @@ def fun2s_function(fun, name=None, dir="."):
           /* Point to input and output buffers */
           int_T i;   
           for (i=0; i<n_in;++i) {{
-            arg[i] = *ssGetInputPortRealSignalPtrs(S,i);
+            arg[i] = ssGetInputPortSignal(S,i);
           }}
           for (i=0; i<n_out;++i) {{
             res[i] = ssGetOutputPortRealSignal(S,i);
@@ -1690,11 +1691,13 @@ int {prefix}flag_value({prefix}struct* m, int index);
               {prefix}get_size(m, "p", id, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
               ssSetInputPortDirectFeedThrough(S, i, 1);
               ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
+              ssSetInputPortRequiredContiguous(S, i, 1);
             }}
 
             {prefix}get_size(m, "x_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
             ssSetInputPortDirectFeedThrough(S, i, 1);
             ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
+            ssSetInputPortRequiredContiguous(S, i, 1);
             i++;""")
 
       if self.nz>0:
@@ -1702,12 +1705,14 @@ int {prefix}flag_value({prefix}struct* m, int index);
             {prefix}get_size(m, "z_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
             ssSetInputPortDirectFeedThrough(S, i, 1);
             ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
+            ssSetInputPortRequiredContiguous(S, i, 1);
             i++;""")
 
       out.write(f"""
             {prefix}get_size(m, "u_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
             ssSetInputPortDirectFeedThrough(S, i, 1);
             ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
+            ssSetInputPortRequiredContiguous(S, i, 1);
             i++;
 
             if (!ssSetNumOutputPorts(S, {3 if self.nz>0 else 2})) return;
@@ -1787,16 +1792,16 @@ int {prefix}flag_value({prefix}struct* m, int index);
             int n_p = {prefix}get_id_count(m, "p"); 
             for (i=0; i<n_p;++i) {{
               {prefix}get_id_from_index(m, "p", i, &id);
-              {prefix}set(m, "p", id, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i), IMPACT_FULL);
+              {prefix}set(m, "p", id, IMPACT_EVERYWHERE, ssGetInputPortSignal(S,i), IMPACT_FULL);
             }}
             i = n_p;
-            {prefix}set(m, "x_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i++), IMPACT_FULL);""")
+            {prefix}set(m, "x_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetInputPortSignal(S,i++), IMPACT_FULL);""")
       if self.nz>0:
         out.write(f"""
-            {prefix}set(m, "z_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i++), IMPACT_FULL);""")
+            {prefix}set(m, "z_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetInputPortSignal(S,i++), IMPACT_FULL);""")
 
       out.write(f"""
-            {prefix}set(m, "u_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, *ssGetInputPortRealSignalPtrs(S,i++), IMPACT_FULL);
+            {prefix}set(m, "u_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetInputPortSignal(S,i++), IMPACT_FULL);
 
             {prefix}solve(m);
             {prefix}print_problem(m);
