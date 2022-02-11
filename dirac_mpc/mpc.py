@@ -605,7 +605,7 @@ class MPC(Ocp):
         fout.write(line)
 
 
-  def export(self,name,src_dir=".",use_codegen=None,context=None,ignore_errors=False):
+  def export(self,name,src_dir=".",use_codegen=None,context=None,ignore_errors=False,short_output=True):
     build_dir_rel = name+"_build_dir"
     build_dir_abs = os.path.join(os.path.abspath(src_dir),build_dir_rel)
 
@@ -1785,7 +1785,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
             i = 0;
             {prefix}get_size(m, "x_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
-            ssSetOutputPortMatrixDimensions(S, i, n_row, n_col);
+            ssSetOutputPortMatrixDimensions(S, i, n_row, {'1' if short_output else 'n_col'});
             i++;""")
 
       if self.nz>0:
@@ -1796,7 +1796,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
       out.write(f"""
             {prefix}get_size(m, "u_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
-            ssSetOutputPortMatrixDimensions(S, i, n_row, n_col);
+            ssSetOutputPortMatrixDimensions(S, i, n_row, {'1' if short_output else 'n_col'});
             i++;
 
             ssSetNumSampleTimes(S, 1);
@@ -1882,13 +1882,13 @@ int {prefix}flag_value({prefix}struct* m, int index);
             {prefix}print_problem(m);
 
             i = 0;
-            {prefix}get(m, "x_opt", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);""")
+            {prefix}get(m, "x_opt", IMPACT_ALL, {'1' if short_output else 'IMPACT_EVERYWHERE'}, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);""")
       if self.nz>0:
         out.write(f"""
             {prefix}get(m, "z_opt", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);""")
 
       out.write(f"""
-            {prefix}get(m, "u_opt", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);
+            {prefix}get(m, "u_opt", IMPACT_ALL, {'0' if short_output else 'IMPACT_EVERYWHERE'}, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);
 
         }}
 
@@ -2029,10 +2029,10 @@ plt.show()
     port_labels_in.append('u_initial_guess')
     mask_name = f"IMPACT MPC\\n{name}"
     port_labels_out = []
-    port_labels_out.append("x_opt")
+    port_labels_out.append("x_opt @ k=1" if short_output else "x_opt")
     if self.nz>0:
       port_labels_out.append("z_opt")
-    port_labels_out.append("u_opt")
+    port_labels_out.append("u_opt @ k=0" if short_output else "u_opt")
     port_in = []
     for p in parameters_symbols:
       port_in.append(f"NaN({p.shape[0]},{p.shape[1]})")
