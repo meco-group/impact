@@ -636,7 +636,7 @@ class MPC(Ocp):
     if self.nz>0:
       sim = self.sys_simulator(intg="collocation",intg_options={"simplify":True,"rootfinder":"fast_newton"})
     else:
-      sim = self.sys_simulator(intg="rk")
+      sim = self.sys_simulator(intg="rk",intg_options={"simplify":True})
     sim_args = {}
     args = []
     label_in = []
