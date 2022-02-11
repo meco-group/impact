@@ -19,13 +19,14 @@ mpc.set_T(T);
 % Objectives
 mpc.add_objective(mpc.integral(weights(1)*cart_pendulum.U^2 + weights(2)*100*cart_pendulum.X^2))
 
-% Path constraints
-mpc.subject_to(-2 <= (cart_pendulum.U <= 2 ))
-mpc.subject_to(-2 <= (cart_pendulum.X <= 2))
-
 % Initial constraints
 mpc.subject_to(mpc.at_t0(cart_pendulum.x)==x_current)
 mpc.subject_to(mpc.at_tf(cart_pendulum.x)==x_final)
+
+% Path constraints
+mpc.subject_to(-2 <= cart_pendulum.U <= 2 )
+% In MPC, you typically do not want to enforce state constraints at the initial time
+mpc.subject_to(-2 <= cart_pendulum.X <= 2, 'include_first', false)
 
 % Solver
 %options = struct;

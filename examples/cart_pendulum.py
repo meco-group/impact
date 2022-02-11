@@ -12,13 +12,14 @@ weights = mpc.parameter('weights',2)
 # Objectives
 mpc.add_objective(mpc.integral(weights[0]*cart_pendulum.F**2 + weights[1]*100*cart_pendulum.pos**2))
 
-# Path constraints
-mpc.subject_to(-2 <= (cart_pendulum.F <= 2 ))
-mpc.subject_to(-2 <= (cart_pendulum.pos <= 2))
-
 # Boundary constraints
 mpc.subject_to(mpc.at_t0(cart_pendulum.x)==x_current)
 mpc.subject_to(mpc.at_tf(cart_pendulum.x)==x_final)
+
+# Path constraints
+mpc.subject_to(-2 <= (cart_pendulum.F <= 2 ))
+# In MPC, you typically do not want to enforce state constraints at the initial time
+mpc.subject_to(-2 <= (cart_pendulum.pos <= 2), include_first=False)
 
 # Solver
 options = {"ipopt": {"print_level": 0}}
