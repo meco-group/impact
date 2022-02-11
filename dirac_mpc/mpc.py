@@ -232,7 +232,13 @@ def fun2s_function(fun, name=None, dir="."):
           int mem = {fun_name}_checkout();
 
           /* Run the CasADi function */
-          {fun_name}(arg,res,iw,w,mem);
+          int_T ret = {fun_name}(arg,res,iw,w,mem);
+
+          if (ret) {{
+              static char msg[{100+len(s_function_name)}];
+              sprintf(msg, "SFunction '{s_function_name}' failed to compute (error code %d) at t=%.6fs.", ret, ssGetT(S));
+              ssSetLocalErrorStatus(S, msg);
+          }}
 
           /* Release hold */
           {fun_name}_release(mem);
@@ -566,6 +572,8 @@ class MPC(Ocp):
 
     increfs = []
 
+    qp = False
+
     with open(name,'w') as fout:
       for line in lines:
         # Bugfix https://gitlab.kuleuven.be/meco/projects/sbo_dirac/dirac_mpc/-/issues/11
@@ -583,8 +591,18 @@ class MPC(Ocp):
           
         if "casadi_int A_colind" in line:
           line = line.replace("casadi_int","c_int")
-        fout.write(line)
 
+        if "/* Solve the QP */" in line:
+          qp = True
+        
+        if "/* Detecting indefiniteness */" in line:
+          qp = False
+
+        if qp and "casadi_f" in line:
+          indent = line[:len(line)-len(line.lstrip())]
+          line = indent + "if (" + line.strip()[:-1] + ") return 1;\n"
+
+        fout.write(line)
 
 
   def export(self,name,src_dir=".",use_codegen=None,context=None):
@@ -1852,6 +1870,15 @@ int {prefix}flag_value({prefix}struct* m, int index);
             {prefix}set(m, "u_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetInputPortSignal(S,i++), IMPACT_FULL);
 
             {prefix}solve(m);
+
+            int_T ret = impact_solve(m);
+            impact_print_problem(m);
+            if (ret) {{
+                static char msg[{100+len(s_function_name)}];
+                sprintf(msg, "SFunction '{s_function_name}' failed to compute (error code %d) at t=%.6fs.", ret, ssGetT(S));
+                ssSetLocalErrorStatus(S, msg);
+            }}
+
             {prefix}print_problem(m);
 
             i = 0;
