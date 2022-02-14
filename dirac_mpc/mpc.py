@@ -1784,7 +1784,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
             ssSetInputPortRequiredContiguous(S, i, 1);
             i++;
 
-            if (!ssSetNumOutputPorts(S, {3 if self.nz>0 else 2})) return;
+            if (!ssSetNumOutputPorts(S, {(3 if self.nz>0 else 2) + (1 if ignore_errors else 0)})) return;
 
             i = 0;
             {prefix}get_size(m, "x_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
@@ -1800,8 +1800,14 @@ int {prefix}flag_value({prefix}struct* m, int index);
       out.write(f"""
             {prefix}get_size(m, "u_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
             ssSetOutputPortMatrixDimensions(S, i, n_row, {'1' if short_output else 'n_col'});
-            i++;
+            i++;""")
 
+      if ignore_errors:
+        out.write(f"""
+            ssSetOutputPortMatrixDimensions(S, i, 1, 1);
+            i++;""")
+
+      out.write(f"""
             ssSetNumSampleTimes(S, 1);
             
             ssSetNumNonsampledZCs(S, 0);
@@ -1877,8 +1883,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
             int_T ret = impact_solve(m);
             impact_print_problem(m);
             if (ret && {int(not ignore_errors)}) {{
-                static char msg[{100+len(s_function_name)}];
-                sprintf(msg, "SFunction '{s_function_name}' failed to compute (error code %d) at t=%.6fs.", ret, ssGetT(S));
+                static char msg[{200+len(s_function_name)}];
+                sprintf(msg, "SFunction '{s_function_name}' failed to compute (error code %d) at t=%.6fs. "
+                "Export with ('ignore_errors', true) if you want the simulation to continue anyway.", ret, ssGetT(S));
                 ssSetLocalErrorStatus(S, msg);
             }}
 
@@ -1892,6 +1899,13 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
       out.write(f"""
             {prefix}get(m, "u_opt", IMPACT_ALL, {'0' if short_output else 'IMPACT_EVERYWHERE'}, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);
+
+            """)
+      if ignore_errors:
+        out.write(f"""ssGetOutputPortRealSignal(S, i++)[0] = ret;
+        """)
+
+      out.write(f"""
 
         }}
 
@@ -2036,6 +2050,8 @@ plt.show()
     if self.nz>0:
       port_labels_out.append("z_opt")
     port_labels_out.append("u_opt @ k=0" if short_output else "u_opt")
+    if ignore_errors:
+      port_labels_out.append("status code (0=good)")
     port_in = []
     for p in parameters_symbols:
       port_in.append(f"NaN({p.shape[0]},{p.shape[1]})")
