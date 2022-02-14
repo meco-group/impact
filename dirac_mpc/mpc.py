@@ -313,7 +313,8 @@ class Diagram:
 
 
 class Mask:
-  def __init__(self,s_function, port_labels_in=None, port_labels_out=None, name=None, port_in=None,port_out=None):
+  def __init__(self,s_function, port_labels_in=None, port_labels_out=None, name=None, port_in=None,port_out=None,dependencies=None):
+    self.dependencies = dependencies
     self.s_function = s_function
     self.port_labels_in = port_labels_in
     self.port_labels_out = port_labels_out
@@ -365,7 +366,8 @@ class Mask:
     sfun_margin_left = margin_left+self.constant_width+self.line_width
     sfun_margin_top = margin_top
 
-    block = etree.fromstring(f"""
+
+    s = f"""
     <Block BlockType="S-Function" Name="S-Function{self.base_id}" SID="{self.base_id}">
       <P Name="Ports">[{len(self.port_labels_in)}, {len(self.port_labels_out)}]</P>
       <P Name="Position">[{sfun_margin_left}, {sfun_margin_top}, {sfun_margin_left+self.sfun_width}, {sfun_margin_top+self.sfun_height}]</P>
@@ -376,10 +378,11 @@ class Mask:
       <P Name="SFcnIsStateOwnerBlock">off</P>
       <Object PropName="MaskObject" ObjectID="{self.base_id+7}" ClassName="Simulink.Mask">
         <P Name="Display" Class="char">{self.mask_commands}</P>
-      </Object>
-    </Block>
-    """)
-    system.append(block)
+      </Object>"""
+    if self.dependencies:
+      s+=f"""<P Name="SFunctionModules">&apos;{" ".join(self.dependencies)}&apos;</P>"""
+    s += f"</Block>"
+    system.append(etree.fromstring(s))
 
     for i, (default, label) in enumerate(zip(self.port_in,self.port_labels_in)):
       id = self.base_id+i+2
@@ -2036,7 +2039,7 @@ plt.show()
     port_in = []
     for p in parameters_symbols:
       port_in.append(f"NaN({p.shape[0]},{p.shape[1]})")
-    mask = Mask(port_labels_in=port_labels_in, port_labels_out=port_labels_out,port_in=port_in,name=mask_name,s_function=s_function_name)
+    mask = Mask(port_labels_in=port_labels_in, port_labels_out=port_labels_out,port_in=port_in,name=mask_name,s_function=s_function_name,dependencies=[name+"_codegen", name])
     diag.add(mask)
     for name,fun in zip(added_functions,self._added_functions):
       mask = Mask(port_labels_in=fun.name_in(), port_labels_out=fun.name_out(), name=fun.name(), s_function=name[:-2])
