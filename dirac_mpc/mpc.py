@@ -697,7 +697,7 @@ class MPC(Ocp):
       outs.append(sim_out["zf"])
       labels_out.append("zf")
     
-    mysim = Function('integrate_MPC_plant_model', args, outs, label_in, labels_out)
+    mysim = Function('integrate_'+name, args, outs, label_in, labels_out)
 
     self.add_function(mysim)
 
