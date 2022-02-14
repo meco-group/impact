@@ -120,7 +120,7 @@ class Model(DotDict):
       self._update({'n'+key: s._numel},allow_keyword=True)
       return s
 
-def fun2s_function(fun, name=None, dir="."):
+def fun2s_function(fun, name=None, dir=".",ignore_errors=False):
     fun_name = fun.name()
     if name is None:
       name = fun_name
@@ -234,7 +234,7 @@ def fun2s_function(fun, name=None, dir="."):
           /* Run the CasADi function */
           int_T ret = {fun_name}(arg,res,iw,w,mem);
 
-          if (ret) {{
+          if (ret && {int(not ignore_errors)}) {{
               static char msg[{100+len(s_function_name)}];
               sprintf(msg, "SFunction '{s_function_name}' failed to compute (error code %d) at t=%.6fs.", ret, ssGetT(S));
               ssSetLocalErrorStatus(S, msg);
@@ -1933,7 +1933,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
     # Export helper functions
     added_functions = []
     for fun in self._added_functions:
-      added_functions.append(fun2s_function(fun, dir=build_dir_abs))
+      added_functions.append(fun2s_function(fun, dir=build_dir_abs,ignore_errors=ignore_errors))
 
     m_build_file_name = os.path.join(build_dir_abs,"build.m")
     with open(m_build_file_name,"w") as out:
