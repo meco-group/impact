@@ -601,7 +601,7 @@ class MPC(Ocp):
         if "/* Detecting indefiniteness */" in line:
           qp = False
 
-        if qp and "casadi_f" in line:
+        if False and qp and "casadi_f" in line:
           indent = line[:len(line)-len(line.lstrip())]
           line = indent + "if (" + line.strip()[:-1] + ") return 1;\n"
 
