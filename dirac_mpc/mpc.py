@@ -11,6 +11,68 @@ from contextlib import redirect_stdout, redirect_stderr
 import io
 import numpy as np
 
+class Field:
+  def __init__(self,name,type):
+    self.name = name
+    self.type = type
+
+class Struct:
+  def __init__(self,name,fields):
+    self.name = name
+    self.fields = fields
+
+
+fields = [Field("n_sqp_iter","int"),
+          Field("n_ls","int"),
+          Field("n_max_ls","int"),
+          Field("n_qp_iter","int"),
+          Field("n_max_qp_iter","int"),
+          Field("runtime","double")]
+
+solver_stats_type = Struct("solver_stats_bus",fields)
+
+solver_stats_c_type = Struct("solver_stats",fields)
+
+def field_type_to_DataType(t):
+  if t=="double":
+    return "double"
+  elif t=="float":
+    return "single"
+  elif t=="int":
+    return "int32"
+
+def field_type_to_matlab_c(t):
+  if t=="double":
+    return "double"
+  elif t=="float":
+    return "float"
+  elif t=="int":
+    return "int32_T"
+
+def field_type_to_c(t):
+  return t
+
+def write_struct(s,target="c"):
+  # #include "tmwtypes.h"
+  ret = ""
+  ret += "typedef struct {\n"
+  conv = field_type_to_c if target=="c" else field_type_to_matlab_c
+  for f in s.fields:
+    ret+= "  " + conv(f.type) + " " + f.name + ";\n"
+  ret += "}" + s.name + ";"
+  return ret
+
+def write_bus(s):
+  ret = f"{s.name} = Simulink.Bus;\n"
+  ret += "elements = {};\n"
+  for f in s.fields:
+    ret+= "e = Simulink.BusElement;\n"
+    ret+= f"e.Name = '{f.name}';\n"
+    ret+= f"e.DataType = '{field_type_to_DataType(f.type)}';\n"
+    ret+= "elements{end+1} = e;\n"
+  ret += f"{s.name}.Elements = [elements{{:}}];"
+  return ret
+
 dae_keys = {"x": "differential_states", "z": "algebraic_states", "p": "parameters", "u": "controls"}
 dae_rockit = {"x": "state", "z": "algebraic", "p": "parameter", "u": "control"}
 
@@ -313,7 +375,7 @@ class Diagram:
 
 
 class Mask:
-  def __init__(self,s_function, port_labels_in=None, port_labels_out=None, name=None, port_in=None,port_out=None,dependencies=None):
+  def __init__(self,s_function, port_labels_in=None, port_labels_out=None, name=None, port_in=None,port_out=None,dependencies=None,init_code=""):
     self.dependencies = dependencies
     self.s_function = s_function
     self.port_labels_in = port_labels_in
@@ -321,6 +383,7 @@ class Mask:
     if port_in is None:
       port_in = []
     self.port_in = port_in
+    self.init_code = init_code
     self.name = name
     self.stride_height  = 40
     self.padding_height = 10
@@ -376,6 +439,7 @@ class Mask:
       <P Name="SFunctionDeploymentMode">off</P>
       <P Name="EnableBusSupport">off</P>
       <P Name="SFcnIsStateOwnerBlock">off</P>
+      <P Name="InitFcn">{self.init_code}</P>
       <Object PropName="MaskObject" ObjectID="{self.base_id+7}" ClassName="Simulink.Mask">
         <P Name="Display" Class="char">{self.mask_commands}</P>
       </Object>"""
@@ -573,12 +637,20 @@ class MPC(Ocp):
     with open(name,'r') as fin:
       lines = fin.readlines()
 
+    name_h = name[:-1]+"h"
+
+    with open(name_h,'r') as fin:
+      lines_h = fin.readlines()
+
     increfs = []
 
     qp = False
 
     with open(name,'w') as fout:
       for line in lines:
+
+        if "Add prefix to internal symbol" in line:
+          line = write_struct(Struct("solver_stats", solver_stats_type.fields))+"\n"+line
         # Bugfix https://gitlab.kuleuven.be/meco/projects/sbo_dirac/dirac_mpc/-/issues/11
         if "return fmax(x, y);" not in line and "CASADI_PREFIX" not in line:
           line = re.sub(r"\bfmax\b","casadi_fmax", line)
@@ -605,8 +677,37 @@ class MPC(Ocp):
           indent = line[:len(line)-len(line.lstrip())]
           line = indent + "if (" + line.strip()[:-1] + ") return 1;\n"
 
+        if "static const casadi_int casadi_s0" in line:
+          line = "static solver_stats CASADI_PREFIX(stats);\n" + \
+                 "const solver_stats* ocpfun_stats() { return &CASADI_PREFIX(stats); }\n"+ \
+                line
+
+        if "MAIN OPTIMIZATION LOOP" in line:
+          s=""
+          for f in solver_stats_type.fields:
+            s += f"CASADI_PREFIX(stats).{f.name} = 0;\n"
+          line = s + line
+        if "Evaluate f, g and first order derivative information" in line:
+          line = "CASADI_PREFIX(stats).n_sqp_iter+=1;" + "\n"+line
+          
+        if "Candidate accepted, update dual variables" in line:
+          line = "CASADI_PREFIX(stats).n_ls += ls_iter;" + "\n"+\
+          "if (ls_iter>CASADI_PREFIX(stats).n_max_ls) CASADI_PREFIX(stats).n_max_ls = ls_iter;" + "\n"+line
+
+        if "Get solution" in line:
+          line = "CASADI_PREFIX(stats).n_qp_iter += d.iter;" + "\n"+\
+          "if (d.iter>CASADI_PREFIX(stats).n_max_qp_iter) CASADI_PREFIX(stats).n_max_qp_iter = d.iter;" + "\n"+line
+
         fout.write(line)
 
+    with open(name_h,'w') as fout:
+      for line in lines_h:
+        if "ocpfun(" in line:
+          line = write_struct(Struct("solver_stats", solver_stats_type.fields))+"\n"+\
+          "const solver_stats* ocpfun_stats();" + "\n" + \
+          "\n"+line
+        fout.write(line)
+      fout.write("")
 
   def export(self,name,src_dir=".",use_codegen=None,context=None,ignore_errors=False,short_output=True):
     build_dir_rel = name+"_build_dir"
@@ -964,6 +1065,8 @@ class MPC(Ocp):
 
       out.write(f"""
 
+{write_struct(Struct(prefix+"stats", solver_stats_type.fields))}
+
 struct {prefix}_struct;
 typedef struct {prefix}_struct {prefix}struct;
 
@@ -1068,6 +1171,7 @@ int {prefix}get_nu();
 
 int {prefix}get_id_count({prefix}struct* m, const char* pool_name);
 int {prefix}get_id_from_index({prefix}struct* m, const char* pool_name, int index, const char** id);
+const {prefix}stats* {prefix}get_stats(const {prefix}struct* m);
 
 #define casadi_real double
 #define casadi_int long long int
@@ -1675,6 +1779,10 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
           }}
 
+          const {prefix}stats* {prefix}get_stats(const {prefix}struct* m) {{
+            return {casadi_call("stats") if use_codegen else 0};
+          }}
+
         """)
 
     lib_name = name
@@ -1700,6 +1808,8 @@ int {prefix}flag_value({prefix}struct* m, int index);
           int sz_arg;
           int n_p;
         }} config;
+
+        {write_struct(solver_stats_type,target="matlab_c")}
 
         void cleanup() {{
           if (m) {{
@@ -1784,7 +1894,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
             ssSetInputPortRequiredContiguous(S, i, 1);
             i++;
 
-            if (!ssSetNumOutputPorts(S, {(3 if self.nz>0 else 2) + (1 if ignore_errors else 0)})) return;
+            if (!ssSetNumOutputPorts(S, {(3 if self.nz>0 else 2) + (1 if ignore_errors else 0)+1})) return;
 
             i = 0;
             {prefix}get_size(m, "x_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
@@ -1808,6 +1918,24 @@ int {prefix}flag_value({prefix}struct* m, int index);
             i++;""")
 
       out.write(f"""
+
+#if MATLAB_MEX_FILE
+            if (ssGetSimMode(S) != SS_SIMMODE_SIZES_CALL_ONLY) {{
+                DTypeId tid;
+                ssRegisterTypeFromNamedObject(S, "solver_stats_bus", &tid)
+                if (tid==INVALID_DTYPE_ID) {{
+                  mexErrMsgIdAndTxt( "MATLAB:s_function:invalidParameter",
+                                    "Could not find solver_stats_bus data_type.");
+                }}
+                ssSetOutputPortDataType(S, i, tid);
+            }}
+#endif  
+            ssSetOutputPortWidth(S, i, 1);
+            ssSetOutputPortBusMode(S, i, SL_BUS_MODE);
+            ssSetBusOutputObjectName(S, i, (void *) "{solver_stats_type.name}");
+            ssSetBusOutputAsStruct(S, i, 1);
+            i++;
+
             ssSetNumSampleTimes(S, 1);
             
             ssSetNumNonsampledZCs(S, 0);
@@ -1904,6 +2032,14 @@ int {prefix}flag_value({prefix}struct* m, int index);
       if ignore_errors:
         out.write(f"""ssGetOutputPortRealSignal(S, i++)[0] = ret;
         """)
+
+      out.write(f"""
+
+          {solver_stats_type.name}* stats = ({solver_stats_type.name}*) ssGetOutputPortRealSignal(S, i++);
+          const {prefix}stats* s = {prefix}get_stats(m);
+      """)
+      for f in solver_stats_type.fields:
+        out.write(f"          stats->{f.name} = s->{f.name};\n")
 
       out.write(f"""
 
@@ -2055,7 +2191,9 @@ plt.show()
     port_in = []
     for p in parameters_symbols:
       port_in.append(f"NaN({p.shape[0]},{p.shape[1]})")
-    mask = Mask(port_labels_in=port_labels_in, port_labels_out=port_labels_out,port_in=port_in,name=mask_name,s_function=s_function_name,dependencies=[name+"_codegen", name])
+
+    port_labels_out.append("solver stats")
+    mask = Mask(port_labels_in=port_labels_in, port_labels_out=port_labels_out,port_in=port_in,name=mask_name,s_function=s_function_name,dependencies=[name+"_codegen", name],init_code=write_bus(solver_stats_type))
     diag.add(mask)
     for name,fun in zip(added_functions,self._added_functions):
       mask = Mask(port_labels_in=fun.name_in(), port_labels_out=fun.name_out(), name=fun.name(), s_function=name[:-2])
