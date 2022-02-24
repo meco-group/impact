@@ -2039,7 +2039,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
           const {prefix}stats* s = {prefix}get_stats(m);
       """)
       for f in solver_stats_type.fields:
-        out.write(f"          stats->{f.name} = s->{f.name};\n")
+        out.write(f"          stats->{f.name} = s ? s->{f.name} : 0;\n")
 
       out.write(f"""
 
