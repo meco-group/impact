@@ -749,7 +749,13 @@ class MPC(Ocp):
     if hasattr(self._method, "Xc"):
       is_coll = True
 
-    ocpfun = self.to_function(casadi_fun_name,[states]+(["z"] if is_coll else [MX()])+[controls]+parameters,[states,algebraics,controls])
+    variables = self.value(vvcat(self.variables['']))
+    [_,variables_control] = self.sample(vvcat(self.variables['control']),grid='control-')
+    [_,variables_states] = self.sample(vvcat(self.variables['states']),grid='control')
+    lam_g = self._method.opti.lam_g
+
+    hotstart_symbol = veccat(variables,variables_control,variables_states,lam_g)
+    ocpfun = self.to_function(casadi_fun_name,[states]+(["z"] if is_coll else [MX()])+[controls]+parameters+[hotstart_symbol],[states,algebraics,controls,hotstart_symbol])
 
     casadi_codegen_file_name_base = name+"_codegen.c"
     casadi_codegen_file_name = os.path.join(build_dir_abs,casadi_codegen_file_name_base)
@@ -1105,12 +1111,22 @@ void {prefix}destroy({prefix}struct* m);
   Outputs of the optimization are written into internal pools \\b x_opt, \\b z_opt, and \\b u_opt,
   and can be queried using \\c get. 
 
-  \\parameter[in] Impact instance pointer
+  \\parameter[in] Hotstart
 
   \\return 0 indicates success
 
 */
 int {prefix}solve({prefix}struct* m);
+
+/*
+Prepare internal structure such that the next solve is hotstarted with the current solution
+*/
+void {prefix}hotstart({prefix}struct* m);
+
+/*
+Prepare internal structure such that the next solve uses the nominal trajectory from export
+*/
+void {prefix}coldstart({prefix}struct* m);
 
 /**
   \\brief Print numerical data present in pools
@@ -1148,6 +1164,7 @@ int {prefix}get({prefix}struct* m, const char* pool_name, const char* id, int st
   \\brief Set numerical data
   \\parameter[in] src          Pointer to a chunk of readable memory.
                                There will be \\b n_row* \\b n_col elements read which can be retrieved using \\c get_size
+                               Any NaNs are ignored (i.e. the memory pool is untouched for those entries)
 */
 int {prefix}set({prefix}struct* m, const char* pool_name, const char* id, int stage, const double* src, int flags);
 /**
@@ -1293,6 +1310,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
             {prefix}pool* x_opt;
             {prefix}pool* z_opt;
             {prefix}pool* u_opt;
+
+            casadi_real* hotstart_in;
+            casadi_real* hotstart_out;
 
             int mem;
 
@@ -1470,6 +1490,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
             m->u_initial_guess->part_unit = {prefix}u_part_unit;
             m->u_initial_guess->part_stride = {prefix}u_part_stride;
 
+            m->hotstart_in = malloc(sizeof(casadi_real)*{hotstart_symbol.numel()});
+            m->hotstart_out = malloc(sizeof(casadi_real)*{hotstart_symbol.numel()});
+
             m->u_opt = malloc(sizeof({prefix}pool));
             m->u_opt->names = {prefix}u_names;
             m->u_opt->size = {u_nominal.size};
@@ -1504,13 +1527,27 @@ int {prefix}flag_value({prefix}struct* m, int index);
             m->x_opt->part_stride = {prefix}x_part_stride;
 
             memcpy(m->p->data, {prefix}p_nominal, {p_nominal.size}*sizeof(casadi_real));
-            memcpy(m->x_initial_guess->data, {prefix}x_nominal, {x_nominal.size}*sizeof(casadi_real));
-            memcpy(m->z_initial_guess->data, {prefix}z_nominal, {z_nominal.size}*sizeof(casadi_real));
-            memcpy(m->u_initial_guess->data, {prefix}u_nominal, {u_nominal.size}*sizeof(casadi_real));
             memcpy(m->x_opt->data, {prefix}x_nominal, {x_nominal.size}*sizeof(casadi_real));
             memcpy(m->z_opt->data, {prefix}z_nominal, {z_nominal.size}*sizeof(casadi_real));
             memcpy(m->u_opt->data, {prefix}u_nominal, {u_nominal.size}*sizeof(casadi_real));
+            {prefix}coldstart(m);
             return m;
+          }}
+
+          void {prefix}coldstart({prefix}struct* m) {{
+            int i;
+            memcpy(m->x_initial_guess->data, {prefix}x_nominal, {x_nominal.size}*sizeof(casadi_real));
+            memcpy(m->z_initial_guess->data, {prefix}z_nominal, {z_nominal.size}*sizeof(casadi_real));
+            memcpy(m->u_initial_guess->data, {prefix}u_nominal, {u_nominal.size}*sizeof(casadi_real));
+            for (i=0;i<{hotstart_symbol.numel()};++i) m->hotstart_in[i] = 0.0;
+          }}
+
+          void {prefix}hotstart({prefix}struct* m) {{
+            int i;
+            memcpy(m->x_initial_guess->data, m->x_opt->data, {x_nominal.size}*sizeof(casadi_real));
+            memcpy(m->u_initial_guess->data, m->u_opt->data, {u_nominal.size}*sizeof(casadi_real));
+            memcpy(m->z_initial_guess->data, m->z_opt->data, {z_nominal.size}*sizeof(casadi_real));
+            memcpy(m->hotstart_in, m->hotstart_out, {hotstart_symbol.numel()}*sizeof(casadi_real));
           }}
 
           void {prefix}destroy({prefix}struct* m) {{
@@ -1765,9 +1802,11 @@ int {prefix}flag_value({prefix}struct* m, int index);
             for (i=0;i<{len(parameters)};i++) {{
               m->arg_casadi[3+i] = m->p->data + {prefix}p_offsets[i];
             }}
+            m->arg_casadi[3+{len(parameters)}] = m->hotstart_in;
             m->res_casadi[0] = m->x_opt->data;
             m->res_casadi[1] = m->z_opt->data;
             m->res_casadi[2] = m->u_opt->data;
+            m->res_casadi[3] = m->hotstart_out;
             return {casadi_call("eval","m->arg_casadi","m->res_casadi","m->iw_casadi","m->w_casadi","m->mem")};
           }}
 
@@ -1855,7 +1894,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
             ssSetNumPWork(S, sz_arg+sz_res);
 
             int n_p = {prefix}get_id_count(m, "p");
-            if (!ssSetNumInputPorts(S, n_p+{3 if self.nz>0 else 2})) return;
+            if (!ssSetNumInputPorts(S, n_p+{3 if self.nz>0 else 2}+1)) return;
             if (n_p<0) {{
               cleanup();
 #ifdef MATLAB_MEX_FILE
@@ -1891,6 +1930,12 @@ int {prefix}flag_value({prefix}struct* m, int index);
             {prefix}get_size(m, "u_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
             ssSetInputPortDirectFeedThrough(S, i, 1);
             ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
+            ssSetInputPortRequiredContiguous(S, i, 1);
+            i++;
+
+            // Port
+            ssSetInputPortDirectFeedThrough(S, i, 1);
+            ssSetInputPortMatrixDimensions(S, i, 1, 1);
             ssSetInputPortRequiredContiguous(S, i, 1);
             i++;
 
@@ -2005,6 +2050,15 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
       out.write(f"""
             {prefix}set(m, "u_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetInputPortSignal(S,i++), IMPACT_FULL);
+
+            real_T* hotstart_ptr = ssGetInputPortSignal(S,i++);
+            real_T hotstart = *hotstart_ptr;
+
+            if (hotstart==1.0) {{
+              {prefix}hotstart(m);
+            }} else if (hotstart==-1.0) {{
+              {prefix}coldstart(m);
+            }}
 
             {prefix}solve(m);
 
@@ -2180,6 +2234,7 @@ plt.show()
     if self.nz>0:
       port_labels_in.append('z_initial_guess')
     port_labels_in.append('u_initial_guess')
+    port_labels_in.append('hotstart')
     mask_name = f"IMPACT MPC\\n{name}"
     port_labels_out = []
     port_labels_out.append("x_opt @ k=1" if short_output else "x_opt")
@@ -2191,6 +2246,14 @@ plt.show()
     port_in = []
     for p in parameters_symbols:
       port_in.append(f"NaN({p.shape[0]},{p.shape[1]})")
+
+    port_in.append(f"NaN({self.nx},{self._method.N+1})")
+    if self.nz>0:
+      port_in.append(f"NaN({len(self.algebraics)},{self._method.N+1})")
+    port_in.append(f"NaN({self.nu},{self._method.N})")
+
+    port_in.append(f"0")
+
 
     port_labels_out.append("solver stats")
     mask = Mask(port_labels_in=port_labels_in, port_labels_out=port_labels_out,port_in=port_in,name=mask_name,s_function=s_function_name,dependencies=[name+"_codegen", name],init_code=write_bus(solver_stats_type))
