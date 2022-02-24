@@ -2060,10 +2060,8 @@ int {prefix}flag_value({prefix}struct* m, int index);
               {prefix}coldstart(m);
             }}
 
-            {prefix}solve(m);
-
-            int_T ret = impact_solve(m);
-            impact_print_problem(m);
+            int_T ret = {prefix}solve(m);
+            {prefix}print_problem(m);
             if (ret && {int(not ignore_errors)}) {{
                 static char msg[{200+len(s_function_name)}];
                 sprintf(msg, "SFunction '{s_function_name}' failed to compute (error code %d) at t=%.6fs. "
