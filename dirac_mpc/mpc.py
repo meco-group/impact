@@ -1019,6 +1019,17 @@ class MPC(Ocp):
 
           impact_solve(m);
 
+          impact_print_problem(m);
+
+          impact_hotstart(m);
+
+          impact_print_problem(m);
+
+          impact_solve(m);
+
+
+          return;
+
 
           /* Allocate scratch space for state and control trajectories */
           impact_get_size(m, "u_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
@@ -1124,9 +1135,14 @@ Prepare internal structure such that the next solve is hotstarted with the curre
 void {prefix}hotstart({prefix}struct* m);
 
 /*
-Prepare internal structure such that the next solve uses the nominal trajectory from export
+Prepare internal structure such that no hotstart information is carried over
 */
 void {prefix}coldstart({prefix}struct* m);
+
+/*
+Prepare internal structure such that the next solve uses the nominal trajectory from export
+*/
+void {prefix}freshstart({prefix}struct* m);
 
 /**
   \\brief Print numerical data present in pools
@@ -1530,11 +1546,17 @@ int {prefix}flag_value({prefix}struct* m, int index);
             memcpy(m->x_opt->data, {prefix}x_nominal, {x_nominal.size}*sizeof(casadi_real));
             memcpy(m->z_opt->data, {prefix}z_nominal, {z_nominal.size}*sizeof(casadi_real));
             memcpy(m->u_opt->data, {prefix}u_nominal, {u_nominal.size}*sizeof(casadi_real));
-            {prefix}coldstart(m);
+            for (i=0;i<{hotstart_symbol.numel()};++i) m->hotstart_out[i] = 0.0;
+            {prefix}freshstart(m);
             return m;
           }}
 
           void {prefix}coldstart({prefix}struct* m) {{
+            int i;
+            for (i=0;i<{hotstart_symbol.numel()};++i) m->hotstart_in[i] = 0.0;
+          }}
+
+          void {prefix}freshstart({prefix}struct* m) {{
             int i;
             memcpy(m->x_initial_guess->data, {prefix}x_nominal, {x_nominal.size}*sizeof(casadi_real));
             memcpy(m->z_initial_guess->data, {prefix}z_nominal, {z_nominal.size}*sizeof(casadi_real));
@@ -2051,12 +2073,14 @@ int {prefix}flag_value({prefix}struct* m, int index);
       out.write(f"""
             {prefix}set(m, "u_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetInputPortSignal(S,i++), IMPACT_FULL);
 
-            real_T* hotstart_ptr = ssGetInputPortSignal(S,i++);
+            const real_T* hotstart_ptr = ssGetInputPortSignal(S,i++);
             real_T hotstart = *hotstart_ptr;
 
             if (hotstart==1.0) {{
               {prefix}hotstart(m);
             }} else if (hotstart==-1.0) {{
+              {prefix}freshstart(m);
+            }} else if (hotstart==0.0) {{
               {prefix}coldstart(m);
             }}
 
@@ -2068,8 +2092,6 @@ int {prefix}flag_value({prefix}struct* m, int index);
                 "Export with ('ignore_errors', true) if you want the simulation to continue anyway.", ret, ssGetT(S));
                 ssSetLocalErrorStatus(S, msg);
             }}
-
-            {prefix}print_problem(m);
 
             i = 0;
             {prefix}get(m, "x_opt", IMPACT_ALL, {'1' if short_output else 'IMPACT_EVERYWHERE'}, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);""")
