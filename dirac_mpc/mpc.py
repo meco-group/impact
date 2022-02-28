@@ -646,8 +646,23 @@ class MPC(Ocp):
 
     qp = False
 
+    fun_context = ""
+
     with open(name,'w') as fout:
       for line in lines:
+
+        if line.startswith("/* "):
+          m = re.search(r"/\* (\w+):",line)
+          if m:
+            fun_context = m.group(1)
+
+        if line.startswith("}"):
+          fun_context = ""
+
+        if "return 0;" in line and fun_context=="solver":
+          s = "end_t = clock();\n"
+          s+= "CASADI_PREFIX(stats).runtime = (casadi_real)(end_t - start_t) / CLOCKS_PER_SEC;\n"
+          line = s+line
 
         if "Add prefix to internal symbol" in line:
           line = write_struct(Struct("solver_stats", solver_stats_type.fields))+"\n"+line
@@ -673,6 +688,9 @@ class MPC(Ocp):
         if "/* Detecting indefiniteness */" in line:
           qp = False
 
+        if "#include <math.h>" in line:
+          line = "#include <time.h>\n" + line
+
         if False and qp and "casadi_f" in line:
           indent = line[:len(line)-len(line.lstrip())]
           line = indent + "if (" + line.strip()[:-1] + ") return 1;\n"
@@ -681,6 +699,9 @@ class MPC(Ocp):
           line = "static solver_stats CASADI_PREFIX(stats);\n" + \
                  "const solver_stats* ocpfun_stats() { return &CASADI_PREFIX(stats); }\n"+ \
                 line
+        
+        if "struct casadi_sqpmethod_prob p;" in line:
+          line = "clock_t start_t, end_t;\nstart_t=clock();\n" + line
 
         if "MAIN OPTIMIZATION LOOP" in line:
           s=""
