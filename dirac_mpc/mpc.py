@@ -22,7 +22,8 @@ class Struct:
     self.fields = fields
 
 
-fields = [Field("n_sqp_iter","int"),
+fields = [Field("sqp_stop_crit","int"),
+          Field("n_sqp_iter","int"),
           Field("n_ls","int"),
           Field("n_max_ls","int"),
           Field("n_qp_iter","int"),
@@ -710,6 +711,11 @@ class MPC(Ocp):
           line = s + line
         if "Formulate the QP" in line:
           line = "CASADI_PREFIX(stats).n_sqp_iter+=1;" + "\n"+line
+
+        if "iter_count" in line:
+          m = re.search(r"if \(iter_count >= (\d+)\) break;",line)
+          if m:
+            line = f"if (iter_count >= {m.group(1)}) {{ CASADI_PREFIX(stats).sqp_stop_crit = 1; break; }}\n"
           
         if "Candidate accepted, update dual variables" in line:
           line = "CASADI_PREFIX(stats).n_ls += ls_iter;" + "\n"+\
