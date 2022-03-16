@@ -708,7 +708,7 @@ class MPC(Ocp):
           for f in solver_stats_type.fields:
             s += f"CASADI_PREFIX(stats).{f.name} = 0;\n"
           line = s + line
-        if "Evaluate f, g and first order derivative information" in line:
+        if "Formulate the QP" in line:
           line = "CASADI_PREFIX(stats).n_sqp_iter+=1;" + "\n"+line
           
         if "Candidate accepted, update dual variables" in line:
