@@ -431,7 +431,7 @@ class Mask:
 
 
     s = f"""
-    <Block BlockType="S-Function" Name="S-Function{self.base_id}" SID="{self.base_id}">
+    <Block BlockType="S-Function" Name="S-Function-{self.s_function}" SID="{self.base_id}">
       <P Name="Ports">[{len(self.port_labels_in)}, {len(self.port_labels_out)}]</P>
       <P Name="Position">[{sfun_margin_left}, {sfun_margin_top}, {sfun_margin_left+self.sfun_width}, {sfun_margin_top+self.sfun_height}]</P>
       <P Name="ZOrder">{self.zorder}</P>
