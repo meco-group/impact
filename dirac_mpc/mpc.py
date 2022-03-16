@@ -376,7 +376,7 @@ class Diagram:
 
 
 class Mask:
-  def __init__(self,s_function, port_labels_in=None, port_labels_out=None, name=None, port_in=None,port_out=None,dependencies=None,init_code=""):
+  def __init__(self,s_function, port_labels_in=None, port_labels_out=None, block_name="", name=None, port_in=None,port_out=None,dependencies=None,init_code=""):
     self.dependencies = dependencies
     self.s_function = s_function
     self.port_labels_in = port_labels_in
@@ -386,6 +386,7 @@ class Mask:
     self.port_in = port_in
     self.init_code = init_code
     self.name = name
+    self.block_name = block_name
     self.stride_height  = 40
     self.padding_height = 10
     self.unit_height  = 40
@@ -432,7 +433,7 @@ class Mask:
 
 
     s = f"""
-    <Block BlockType="S-Function" Name="S-Function-{self.s_function}" SID="{self.base_id}">
+    <Block BlockType="S-Function" Name="Block_{self.block_name}" SID="{self.base_id}">
       <P Name="Ports">[{len(self.port_labels_in)}, {len(self.port_labels_out)}]</P>
       <P Name="Position">[{sfun_margin_left}, {sfun_margin_top}, {sfun_margin_left+self.sfun_width}, {sfun_margin_top+self.sfun_height}]</P>
       <P Name="ZOrder">{self.zorder}</P>
@@ -447,7 +448,12 @@ class Mask:
     if self.dependencies:
       s+=f"""<P Name="SFunctionModules">&apos;{" ".join(self.dependencies)}&apos;</P>"""
     s += f"</Block>"
-    system.append(etree.fromstring(s))
+    try:
+      system.append(etree.fromstring(s))
+    except Exception as e:
+      for i,line in enumerate(s.split("\n")):
+        print(i,line)
+      raise e
 
     for i, (default, label) in enumerate(zip(self.port_in,self.port_labels_in)):
       id = self.base_id+i+2
@@ -2303,10 +2309,10 @@ plt.show()
 
 
     port_labels_out.append("solver stats")
-    mask = Mask(port_labels_in=port_labels_in, port_labels_out=port_labels_out,port_in=port_in,name=mask_name,s_function=s_function_name,dependencies=[name+"_codegen", name],init_code=write_bus(solver_stats_type))
+    mask = Mask(port_labels_in=port_labels_in, port_labels_out=port_labels_out,port_in=port_in,block_name=name,name=mask_name,s_function=s_function_name,dependencies=[name+"_codegen", name],init_code=write_bus(solver_stats_type))
     diag.add(mask)
     for name,fun in zip(added_functions,self._added_functions):
-      mask = Mask(port_labels_in=fun.name_in(), port_labels_out=fun.name_out(), name=fun.name(), s_function=name[:-2])
+      mask = Mask(port_labels_in=fun.name_in(), port_labels_out=fun.name_out(), block_name=fun.name(), name=fun.name(), s_function=name[:-2])
       diag.add(mask)
     diag.write()
 
