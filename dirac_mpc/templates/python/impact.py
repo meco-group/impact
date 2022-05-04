@@ -2,6 +2,12 @@ from ctypes import *
 import numpy as np
 import os
 
+try:
+    import casadi
+    os.environ["PATH"] += os.pathsep + casadi.GlobalOptions.getCasadiPath()
+except:
+    pass
+
 class Impact:
     def _register(self,fun_name,argtypes,restype):
         fun = getattr(self.lib,self.prefix+fun_name)
@@ -16,7 +22,11 @@ class Impact:
 
         # PyDLL instead of CDLL to keep GIL:
         # virtual machine emits Python prints
-        self.lib = PyDLL(os.path.join(build_dir_abs,"lib"+name+".so"))
+        if os.name == "nt":
+            libname = name+".dll"
+        else:
+            libname = "lib"+name+".so"
+        self.lib = PyDLL(os.path.join(build_dir_abs,libname))
 
         # Type aliases
         m_type = c_void_p
@@ -29,7 +39,7 @@ class Impact:
             return 0
         self._formatter = formatter_type(formatter)
 
-        self._register("initialize",[formatter_type], m_type)
+        self._register("initialize",[formatter_type, c_char_p], m_type)
         self._register("destroy",[m_type], None)
         self._register("get",[m_type, c_char_p, c_char_p, c_int, POINTER(c_double), c_int], c_int)
         self._register("set",[m_type, c_char_p, c_char_p, c_int, POINTER(CONST(c_double)), c_int], c_int)
@@ -41,7 +51,7 @@ class Impact:
         self._register("flag_name",[m_type, c_int], c_char_p)
         self._register("flag_value",[m_type, c_int], c_int)
 
-        self._m = self._initialize(self._formatter)
+        self._m = self._initialize(self._formatter, build_dir_abs.encode("ascii"))
         """
           int {prefix}get_id_count(MPCstruct* m, const char* pool_name);
           int {prefix}get_id_from_index(MPCstruct* m, const char* pool_name, int index, const char** id);

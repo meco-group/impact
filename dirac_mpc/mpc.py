@@ -945,7 +945,7 @@ class MPC(Ocp):
         #include <assert.h>
 
         int main() {{
-          {prefix}struct* m = initialize(printf);
+          {prefix}struct* m = initialize(printf, 0);
           if (!m) {{
             printf("Failed to initialize\\n");
             return 1;
@@ -1026,7 +1026,7 @@ class MPC(Ocp):
         int main() {{
           int i, j, n_row, n_col;
           double *u_scratch, *x_scratch;
-          {prefix}struct* m = impact_initialize(printf);
+          {prefix}struct* m = impact_initialize(printf, 0);
           if (!m) {{
             printf("Failed to initialize\\n");
             return 1;
@@ -1129,12 +1129,13 @@ typedef int (*formatter)(const char * s);
 
   \\param[in]  fp Function pointer to a printf-like function
               Common values: 0 (null pointer: no printing), printf (C's standard printf method defined in stdio)
+  \\param[in]  build_dir Location of build directory. If not supplied (null pointer), uses a hard-coded export path.
 
 
   \\return Impact instance pointer, or a null pointer upon failure
 
 */
-{prefix}struct* {prefix}initialize(formatter fp);
+{prefix}struct* {prefix}initialize(formatter fp, const char* build_dir);
 /**
   \\brief Destroy impact instance
 
@@ -1437,10 +1438,11 @@ int {prefix}flag_value({prefix}struct* m, int index);
           }}
 
 
-          {prefix}struct* {prefix}initialize(formatter fp) {{
+          {prefix}struct* {prefix}initialize(formatter fp, const char* build_dir) {{
             int flag;
             int i;
             {prefix}struct* m;
+            char casadi_file[2048];
             m = malloc(sizeof({prefix}struct));
             m->fp = fp;
             m->fatal = {prefix}fatal;
@@ -1453,10 +1455,16 @@ int {prefix}flag_value({prefix}struct* m, int index);
               m->pop = 0;
             }}
             if (m->id<0) {{
-              flag = casadi_c_push_file("{escape(casadi_file_name)}");
+              if (build_dir==0) {{
+                strcpy(casadi_file, "{escape(build_dir_abs)}");
+              }} else {{
+                strcpy(casadi_file, build_dir);
+              }}
+              strcat(casadi_file, "/{name}.casadi");
+              flag = casadi_c_push_file(casadi_file);
               m->pop = 1;
               if (flag) {{
-                m->fatal(m, "initialize", "Could not load file '{escape(casadi_file_name)}'.\\n");
+                m->fatal(m, "initialize", "Could not load file '%s'.\\n", casadi_file);
                 return 0;
               }}
               m->id = casadi_c_id("{casadi_fun_name}");
@@ -1925,9 +1933,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
             cleanup();
 
 #ifdef MATLAB_MEX_FILE
-            m = {prefix}initialize(mexPrintf);
+            m = {prefix}initialize(mexPrintf, 0);
 #else
-            m = {prefix}initialize(0);
+            m = {prefix}initialize(0, 0);
 #endif
             if (!m) {{
               cleanup();
@@ -2312,8 +2320,8 @@ plt.show()
     port_labels_out.append("solver stats")
     mask = Mask(port_labels_in=port_labels_in, port_labels_out=port_labels_out,port_in=port_in,block_name=name,name=mask_name,s_function=s_function_name,dependencies=[name+"_codegen", name],init_code=write_bus(solver_stats_type))
     diag.add(mask)
-    for name,fun in zip(added_functions,self._added_functions):
-      mask = Mask(port_labels_in=fun.name_in(), port_labels_out=fun.name_out(), block_name=fun.name(), name=fun.name(), s_function=name[:-2])
+    for fname,fun in zip(added_functions,self._added_functions):
+      mask = Mask(port_labels_in=fun.name_in(), port_labels_out=fun.name_out(), block_name=fun.name(), name=fun.name(), s_function=fname[:-2])
       diag.add(mask)
     diag.write()
 
@@ -2364,4 +2372,38 @@ plt.show()
       out.write(os.path.basename(hello_file_name) + ": " + os.path.basename(hello_c_file_name) + "\n")
       out.write("\t"+" ".join(hello_compile_commands)+"\n\n")
 
+    cmake_file_name = os.path.join(build_dir_abs,"CMakeLists.txt")
+    with open(cmake_file_name,"w") as out:
+      out.write(f"""
+      project({name})
+
+      set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+
+      cmake_minimum_required(VERSION 3.0)
+
+      message("If you get a complaint about missing libcasadi.lib, please copy the casadi.lib file to libcasadi.lib")
+      set(CMAKE_PREFIX_PATH "{escape(casadi.GlobalOptions.getCasadiPath())}" ${{CMAKE_PREFIX_PATH}})
+      find_package(casadi REQUIRED)
+
+      add_library({name} SHARED {name}.c)
+      target_link_libraries({name} casadi)
+
+      install(TARGETS {name} RUNTIME DESTINATION . LIBRARY DESTINATION .)
+
+      """)
+    cmake_file_name = os.path.join(build_dir_abs,"build.bat")
+    with open(cmake_file_name,"w") as out:
+      out.write(f"""
+      echo "Should be ran in 'x64 Native Tools Command Prompt for VS'"
+      cmake -G "Visual Studio 16 2019" -A x64 -B build
+      cmake --build build --config Release
+      cmake --install build
+      """)
+    cmake_file_name = os.path.join(build_dir_abs,"build.sh")
+    with open(cmake_file_name,"w") as out:
+      out.write(f"""
+      cmake -DCMAKE_INSTALL_PREFIX=. -B build
+      cmake --build build --config Release
+      cmake --install build
+      """)
     print("success")
