@@ -2176,6 +2176,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
     # Export helper functions
     added_functions = []
     for fun in self._added_functions:
+      fun.save(os.path.join(build_dir_abs, fun.name()+".casadi"))
       added_functions.append(fun2s_function(fun, dir=build_dir_abs,ignore_errors=ignore_errors))
 
     m_build_file_name = os.path.join(build_dir_abs,"build.m")
