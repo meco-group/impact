@@ -2397,13 +2397,13 @@ plt.show()
       echo "Should be ran in 'x64 Native Tools Command Prompt for VS'"
       cmake -G "Visual Studio 16 2019" -A x64 -B build
       cmake --build build --config Release
-      cmake --install build
+      cmake --install build --prefix .
       """)
     cmake_file_name = os.path.join(build_dir_abs,"build.sh")
     with open(cmake_file_name,"w") as out:
       out.write(f"""
       cmake -DCMAKE_INSTALL_PREFIX=. -B build
       cmake --build build --config Release
-      cmake --install build
+      cmake --install build --prefix .
       """)
     print("success")
