@@ -848,6 +848,10 @@ class MPC(Ocp):
 
     self.add_function(mysim)
 
+    sys_dae = self.sys_dae()
+    sys_dae_fun = Function('sys_dae_fun',sys_dae,["x","u","z","p","t"],["ode","alg"])
+    self.add_function(sys_dae_fun)
+
     if use_codegen is None or use_codegen:
       options = {}
       options["with_header"] = True
