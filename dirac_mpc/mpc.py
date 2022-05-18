@@ -852,6 +852,12 @@ class MPC(Ocp):
     sys_dae_fun = Function('sys_dae_fun',sys_dae,["x","u","z","p","t"],["ode","alg"])
     self.add_function(sys_dae_fun)
 
+    gridfun = self.to_function(casadi_fun_name+"_grid",
+      parameters,
+      [self.sample(self.t, grid='control')[1]],
+      [p.name() for p in self.parameters['']] + [p.name() for p in self.parameters['control']],
+      ['grid'])
+    self.add_function(gridfun)
     if use_codegen is None or use_codegen:
       options = {}
       options["with_header"] = True
