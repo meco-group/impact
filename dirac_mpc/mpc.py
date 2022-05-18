@@ -788,7 +788,11 @@ class MPC(Ocp):
     lam_g = self._method.opti.lam_g
 
     hotstart_symbol = veccat(variables,variables_control,variables_states,lam_g)
-    ocpfun = self.to_function(casadi_fun_name,[states]+(["z"] if is_coll else [MX()])+[controls]+parameters+[hotstart_symbol],[states,algebraics,controls,hotstart_symbol])
+    ocpfun = self.to_function(casadi_fun_name,
+      [states]+(["z"] if is_coll else [MX()])+[controls]+parameters+[hotstart_symbol],
+      [states,algebraics,controls,hotstart_symbol],
+      ['x0','z0','u0'] + [p.name() for p in self.parameters['']] + [p.name() for p in self.parameters['control']] + ['hotstart_in'],
+      ['x','z','u','hotstart_out'])
 
     casadi_codegen_file_name_base = name+"_codegen.c"
     casadi_codegen_file_name = os.path.join(build_dir_abs,casadi_codegen_file_name_base)
