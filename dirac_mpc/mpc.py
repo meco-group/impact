@@ -852,11 +852,17 @@ class MPC(Ocp):
     sys_dae_fun = Function('dae_'+name,sys_dae,["x","u","z","p","t"],["ode","alg"])
     self.add_function(sys_dae_fun)
 
-    gridfun = self.to_function("grid_"+name,
+    gridfun = Function("grid_"+name,
       parameters,
       [self.sample(self.t, grid='control')[1]],
       [p.name() for p in self.parameters['']] + [p.name() for p in self.parameters['control']],
       ['grid'])
+    if gridfun.has_free():
+      gridfun = self.to_function("grid_"+name,
+        parameters,
+        [self.sample(self.t, grid='control')[1]],
+        [p.name() for p in self.parameters['']] + [p.name() for p in self.parameters['control']],
+        ['grid'])
     self.add_function(gridfun)
     if use_codegen is None or use_codegen:
       options = {}
