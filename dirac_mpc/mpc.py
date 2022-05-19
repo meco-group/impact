@@ -849,10 +849,10 @@ class MPC(Ocp):
     self.add_function(mysim)
 
     sys_dae = self.sys_dae()
-    sys_dae_fun = Function('sys_dae_fun',sys_dae,["x","u","z","p","t"],["ode","alg"])
+    sys_dae_fun = Function('dae_'+name,sys_dae,["x","u","z","p","t"],["ode","alg"])
     self.add_function(sys_dae_fun)
 
-    gridfun = self.to_function(casadi_fun_name+"_grid",
+    gridfun = self.to_function("grid_"+name,
       parameters,
       [self.sample(self.t, grid='control')[1]],
       [p.name() for p in self.parameters['']] + [p.name() for p in self.parameters['control']],
