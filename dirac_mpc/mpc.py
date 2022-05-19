@@ -787,7 +787,9 @@ class MPC(Ocp):
     [_,variables_states] = self.sample(vvcat(self.variables['states']),grid='control')
     lam_g = self._method.opti.lam_g
 
+
     hotstart_symbol = veccat(variables,variables_control,variables_states,lam_g)
+    
     ocpfun = self.to_function(casadi_fun_name,
       [states]+(["z"] if is_coll else [MX()])+[controls]+parameters+[hotstart_symbol],
       [states,algebraics,controls,hotstart_symbol],
@@ -864,6 +866,18 @@ class MPC(Ocp):
         [p.name() for p in self.parameters['']] + [p.name() for p in self.parameters['control']],
         ['grid'])
     self.add_function(gridfun)
+
+    costfun = Function("cost_"+name,
+      [states]+[controls]+parameters,
+      [self._method.opti.f],
+      ['x','u'] + [p.name() for p in self.parameters['']] + [p.name() for p in self.parameters['control']],
+      ['f']
+    )
+    if costfun.has_free():
+      print("Cost function has stray dependencies")
+    else:
+      self.add_function(costfun)
+
     if use_codegen is None or use_codegen:
       options = {}
       options["with_header"] = True
