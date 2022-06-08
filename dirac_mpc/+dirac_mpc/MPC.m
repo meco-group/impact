@@ -51,6 +51,76 @@ classdef MPC < rockit.Ocp & rockit.Stage
       end
       varargout = pythoncasadiinterface.python2matlab_ret(res);
     end
+    function varargout = opti_x(obj,varargin)
+      global pythoncasadiinterface
+      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,0,{});
+      if isempty(kwargs)
+        res = obj.parent.opti_x(args{:});
+      else
+        res = obj.parent.opti_x(args{:},pyargs(kwargs{:}));
+      end
+      varargout = pythoncasadiinterface.python2matlab_ret(res);
+    end
+    function varargout = opti_f(obj,varargin)
+      global pythoncasadiinterface
+      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,0,{});
+      if isempty(kwargs)
+        res = obj.parent.opti_f(args{:});
+      else
+        res = obj.parent.opti_f(args{:},pyargs(kwargs{:}));
+      end
+      varargout = pythoncasadiinterface.python2matlab_ret(res);
+    end
+    function varargout = opti_g(obj,varargin)
+      global pythoncasadiinterface
+      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,0,{});
+      if isempty(kwargs)
+        res = obj.parent.opti_g(args{:});
+      else
+        res = obj.parent.opti_g(args{:},pyargs(kwargs{:}));
+      end
+      varargout = pythoncasadiinterface.python2matlab_ret(res);
+    end
+    function varargout = opti_lbg(obj,varargin)
+      global pythoncasadiinterface
+      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,0,{});
+      if isempty(kwargs)
+        res = obj.parent.opti_lbg(args{:});
+      else
+        res = obj.parent.opti_lbg(args{:},pyargs(kwargs{:}));
+      end
+      varargout = pythoncasadiinterface.python2matlab_ret(res);
+    end
+    function varargout = opti_ubg(obj,varargin)
+      global pythoncasadiinterface
+      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,0,{});
+      if isempty(kwargs)
+        res = obj.parent.opti_ubg(args{:});
+      else
+        res = obj.parent.opti_ubg(args{:},pyargs(kwargs{:}));
+      end
+      varargout = pythoncasadiinterface.python2matlab_ret(res);
+    end
+    function varargout = opti_lam_g(obj,varargin)
+      global pythoncasadiinterface
+      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,0,{});
+      if isempty(kwargs)
+        res = obj.parent.opti_lam_g(args{:});
+      else
+        res = obj.parent.opti_lam_g(args{:},pyargs(kwargs{:}));
+      end
+      varargout = pythoncasadiinterface.python2matlab_ret(res);
+    end
+    function varargout = opti_p(obj,varargin)
+      global pythoncasadiinterface
+      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,0,{});
+      if isempty(kwargs)
+        res = obj.parent.opti_p(args{:});
+      else
+        res = obj.parent.opti_p(args{:},pyargs(kwargs{:}));
+      end
+      varargout = pythoncasadiinterface.python2matlab_ret(res);
+    end
     function varargout = export(obj,varargin)
 
     varargin = [varargin {'context','matlab'}];

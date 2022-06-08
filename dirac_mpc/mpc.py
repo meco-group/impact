@@ -742,6 +742,28 @@ class MPC(Ocp):
         fout.write(line)
       fout.write("")
 
+  def opti_x(self):
+    return self._method.opti.x
+
+  def opti_f(self):
+    return self._method.opti.f
+
+  def opti_g(self):
+    return self._method.opti.g
+
+  def opti_lbg(self):
+    return self._method.opti.lbg
+
+  def opti_ubg(self):
+    return self._method.opti.ubg
+
+  def opti_lam_g(self):
+    return self._method.opti.lam_g
+
+  def opti_p(self):
+    return self._method.opti.p
+
+
   def export(self,name,src_dir=".",use_codegen=None,context=None,ignore_errors=False,short_output=True):
     build_dir_rel = name+"_build_dir"
     build_dir_abs = os.path.join(os.path.abspath(src_dir),build_dir_rel)
