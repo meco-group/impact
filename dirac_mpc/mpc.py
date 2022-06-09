@@ -2397,14 +2397,19 @@ plt.show()
 
 
     make_file_name = os.path.join(build_dir_abs,"Makefile")
+
+    source_files = [casadi_codegen_file_name]
+    for e in artifacts:
+      if ".c" in e.name:
+        source_files.append(e.name)
       
     with open(make_file_name,"w") as out:
 
       flags = ["-pedantic","-Wall","-Wextra","-Wno-unknown-pragmas","-Wno-long-long","-Wno-unused-parameter","-Wno-unused-const-variable","-Wno-sign-compare","-Wno-unused-but-set-variable","-Wno-unused-variable","-Wno-endif-labels"]
-      deps = ["-L"+build_dir_abs,"-Wl,-rpath="+build_dir_abs,"-L"+GlobalOptions.getCasadiPath(),"-I"+GlobalOptions.getCasadiIncludePath(),"-Wl,-rpath="+GlobalOptions.getCasadiPath()]
+      deps = ["-I"+build_dir_abs,"-L"+build_dir_abs,"-Wl,-rpath="+build_dir_abs,"-L"+GlobalOptions.getCasadiPath(),"-I"+GlobalOptions.getCasadiIncludePath(),"-Wl,-rpath="+GlobalOptions.getCasadiPath()]
       if use_codegen:
         lib_codegen_file_name = os.path.join(build_dir_abs,"lib" + name + "_codegen.so")
-        lib_codegen_compile_commands = ["gcc","-g","-fPIC","-shared",casadi_codegen_file_name,"-lm","-o"+lib_codegen_file_name]+deps
+        lib_codegen_compile_commands = ["gcc","-g","-fPIC","-shared"]+source_files+ ["-lm","-o"+lib_codegen_file_name]+deps
         deps += ["-l"+name+"_codegen","-losqp"] 
       else:
         deps += ["-lcasadi"]
@@ -2433,7 +2438,7 @@ plt.show()
 
       print(hello_compile_commands)
       if use_codegen:
-        out.write(os.path.basename(lib_codegen_file_name) + ": " + os.path.basename(casadi_codegen_file_name) + "\n")
+        out.write(os.path.basename(lib_codegen_file_name) + ": " + " ".join([os.path.basename(e) for e in source_files]) + "\n")
         out.write("\t"+" ".join(lib_codegen_compile_commands)+"\n\n")
 
       out.write(os.path.basename(lib_file_name) + ": " + os.path.basename(c_file_name) + "\n")
