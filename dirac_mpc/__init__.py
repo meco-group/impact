@@ -1,5 +1,5 @@
 from .mpc import MPC, Model, DotDict
-from rockit import DirectCollocation, MultipleShooting, SingleShooting, matlab_path
+from rockit import DirectCollocation, MultipleShooting, SingleShooting, matlab_path, external_method
 import os
 
 try:
