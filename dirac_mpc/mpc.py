@@ -1149,6 +1149,8 @@ class MPC(Ocp):
             printf("\\n");
 
           }}
+          free(u_scratch);
+          free(x_scratch);
 
           impact_destroy(m);
         }}
@@ -1667,6 +1669,27 @@ int {prefix}flag_value({prefix}struct* m, int index);
               /* Release thread-local (not thread-safe) */
               {casadi_call("release","m->mem")};
               {"" if use_codegen else "if (m->pop) casadi_c_pop();"}
+              free(m->arg);
+              free(m->res);
+              free(m->iw);
+              free(m->w);
+              free(m->p->data);
+              free(m->p);
+              free(m->x_current);
+              free(m->x_initial_guess->data);
+              free(m->x_initial_guess);
+              free(m->z_initial_guess->data);
+              free(m->z_initial_guess);
+              free(m->u_initial_guess->data);
+              free(m->u_initial_guess);
+              free(m->hotstart_in);
+              free(m->hotstart_out);
+              free(m->u_opt->data);
+              free(m->u_opt);
+              free(m->x_opt->data);
+              free(m->x_opt);
+              free(m->z_opt->data);
+              free(m->z_opt);
               free(m);
             }}
           }}
