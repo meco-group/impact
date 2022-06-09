@@ -939,10 +939,10 @@ class MPC(Ocp):
     for p in parameters:
       p_offsets.append(p_offsets[-1]+p.numel())
 
-    p_nominal = self._method.opti.value(vvcat(parameters),self._method.opti.initial())
-    x_nominal = self._method.opti.value(vec(states),self._method.opti.initial())
-    z_nominal = self._method.opti.value(vec(algebraics),self._method.opti.initial())
-    u_nominal = self._method.opti.value(vec(controls),self._method.opti.initial())
+    p_nominal = self.initial_value(vvcat(parameters))
+    x_nominal = self.initial_value(vec(states))
+    z_nominal = self.initial_value(vec(algebraics))
+    u_nominal = self.initial_value(vec(controls))
 
     if isinstance(p_nominal,float): p_nominal = np.array([p_nominal])
     if isinstance(x_nominal,float): x_nominal = np.array([x_nominal])
@@ -961,7 +961,7 @@ class MPC(Ocp):
     if self.parameters['']:
       hello_p_normal = self.parameters[''][-1]
       hello_p_normal_name = hello_p_normal.name()
-      hello_p_normal_nominal = self._method.opti.value(self.value(hello_p_normal),self._method.opti.initial())
+      hello_p_normal_nominal = self.initial_value(self.value(hello_p_normal))
       if isinstance(hello_p_normal_nominal,float): hello_p_normal_nominal = np.array([hello_p_normal_nominal])
 
     i_x_current = None
@@ -979,7 +979,7 @@ class MPC(Ocp):
     if i_x_current is None:
       raise Exception("You must define a parameter named 'x_current'")
 
-    x_current_nominal = self._method.opti.value(parameters[i_x_current],self._method.opti.initial())
+    x_current_nominal = self.initial_value(parameters[i_x_current])
 
     c_file_name_base = name+".c"
     c_file_name = os.path.join(build_dir_abs,c_file_name_base)
