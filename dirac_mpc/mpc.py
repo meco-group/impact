@@ -1,5 +1,6 @@
 from rockit import Ocp
 from casadi import Function, MX, vcat, vvcat, veccat, GlobalOptions, vec, CodeGenerator
+from rockit.casadi_helpers import prepare_build_dir
 import casadi
 import yaml
 import os
@@ -771,18 +772,12 @@ class MPC(Ocp):
     def escape(e):
       return e.replace('\\','/')
 
-    os.makedirs(build_dir_abs,exist_ok=True)
-    # Clean directory (but do not delete it,
-    # since this confuses open shells in Linux (e.g. bash, Matlab)
-    for filename in os.listdir(build_dir_abs):
-      file_path = os.path.join(build_dir_abs, filename)
-      try:
-        if os.path.isfile(file_path) or os.path.islink(file_path):
-          os.unlink(file_path)
-        elif os.path.isdir(file_path):
-          shutil.rmtree(file_path)
-      except:
-        pass
+    prepare_build_dir(build_dir_abs)
+
+    artifacts = list(self._method.artifacts)
+
+    for e in artifacts:
+      shutil.copy(os.path.join(self._method.build_dir_abs, e.name), build_dir_abs)
     
     print(self.x)
     print(self.z)
