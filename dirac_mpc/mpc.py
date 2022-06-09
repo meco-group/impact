@@ -1111,10 +1111,6 @@ class MPC(Ocp):
 
           impact_solve(m);
 
-
-          return;
-
-
           /* Allocate scratch space for state and control trajectories */
           impact_get_size(m, "u_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
           printf("u_opt dims: %d - %d\\n", n_row, n_col);
