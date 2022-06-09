@@ -640,7 +640,7 @@ class MPC(Ocp):
     return m
 
   @staticmethod
-  def patch_codegen(name):
+  def patch_codegen(name,ocp):
     import re
     with open(name,'r') as fin:
       lines = fin.readlines()
@@ -692,6 +692,9 @@ class MPC(Ocp):
 
         if "/* Solve the QP */" in line:
           qp = True
+
+        if "if (grampc_driver(arg, res, iw, w, mem)) return 1;" in line:
+          line = "mem = grampc_driver_checkout();\n" + line + "grampc_driver_release(mem);\n"
         
         if "/* Detecting indefiniteness */" in line:
           qp = False
@@ -704,9 +707,34 @@ class MPC(Ocp):
           line = indent + "if (" + line.strip()[:-1] + ") return 1;\n"
 
         if "static const casadi_int casadi_s0" in line:
-          line = "static solver_stats CASADI_PREFIX(stats);\n" + \
-                 "const solver_stats* ocpfun_stats() { return &CASADI_PREFIX(stats); }\n"+ \
-                line
+          if "Grampc" in str(ocp._method):
+            line = """
+        typedef struct {
+            int sqp_stop_crit;
+            int n_sqp_iter;
+            int n_ls;
+            int n_max_ls;
+            int n_qp_iter;
+            int n_max_qp_iter;
+            double runtime;
+        } compat_solver_stats;
+        static solver_stats CASADI_PREFIX(stats);
+        const compat_solver_stats* grampc_driver_get_stats(void);
+        int grampc_driver_checkout(void);
+        void grampc_driver_release(int);
+
+        const solver_stats* ocpfun_stats() { 
+          const compat_solver_stats* s = grampc_driver_get_stats();
+          CASADI_PREFIX(stats).sqp_stop_crit = s->sqp_stop_crit;
+          CASADI_PREFIX(stats).n_sqp_iter = s->n_sqp_iter;
+          CASADI_PREFIX(stats).n_qp_iter = s->n_qp_iter;
+          return &CASADI_PREFIX(stats);
+        }
+            """ + line
+          else:
+            line = "static solver_stats CASADI_PREFIX(stats);\n" + \
+                  "const solver_stats* ocpfun_stats() { return &CASADI_PREFIX(stats); }\n"+ \
+                  line
         
         if "struct casadi_sqpmethod_prob p;" in line:
           line = "clock_t start_t, end_t;\nstart_t=clock();\n" + line
@@ -778,7 +806,6 @@ class MPC(Ocp):
 
     for e in artifacts:
       shutil.copy(os.path.join(self._method.build_dir_abs, e.name), build_dir_abs)
-    
     print(self.x)
     print(self.z)
     print(self.u)
@@ -912,7 +939,7 @@ class MPC(Ocp):
           raise Exception("use_codegen argument was True, but not supported.")
       else:
         use_codegen = True
-        self.patch_codegen(casadi_codegen_file_name)
+        self.patch_codegen(casadi_codegen_file_name, self)
     print("use_codegen", use_codegen)
     casadi_file_name = os.path.join(build_dir_abs,name+".casadi")
     ocpfun.save(casadi_file_name)
@@ -1101,7 +1128,18 @@ class MPC(Ocp):
 
           impact_print_problem(m);
 
+
+
+          printf("Start a solve.\\n");
           impact_solve(m);
+          printf("Solve finished.\\n");
+
+          const impact_stats* stats = impact_get_stats(m);
+          if (stats) {{
+            printf("Number of outer iterations: %d\\n", stats->n_sqp_iter);
+          }} else {{
+            printf("No stats available.\\n");
+          }}
 
           impact_print_problem(m);
 
@@ -2401,7 +2439,7 @@ plt.show()
     source_files = [casadi_codegen_file_name]
     for e in artifacts:
       if ".c" in e.name:
-        source_files.append(e.name)
+        source_files.append(os.path.join(build_dir_abs, e.name))
       
     with open(make_file_name,"w") as out:
 
