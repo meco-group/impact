@@ -1707,7 +1707,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
               /* Release thread-local (not thread-safe) */
               {casadi_call("release","m->mem")};
               {"" if use_codegen else "if (m->pop) casadi_c_pop();"}
-              free(m->arg);
+              /*free(m->arg);
               free(m->res);
               free(m->iw);
               free(m->w);
@@ -1727,7 +1727,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
               free(m->x_opt->data);
               free(m->x_opt);
               free(m->z_opt->data);
-              free(m->z_opt);
+              free(m->z_opt);*/
               free(m);
             }}
           }}
