@@ -55,7 +55,7 @@ method = external_method('grampc',N=40,grampc_options=grampc_options)
 #method = MultipleShooting(N=40)
 mpc.method(method)
 
-mpc.solve()
+mpc.solve_limited()
 
 # Make it concrete for this ocp
 #mpc.method(MultipleShooting(N=50,M=1,intg='rk'))
