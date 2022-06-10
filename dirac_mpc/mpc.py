@@ -2305,6 +2305,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
         flags={{['-I' build_dir] ['-L' build_dir] ['-I' casadi.GlobalOptions.getCasadiIncludePath()] ['-L' casadi.GlobalOptions.getCasadiPath()]}};
         files = {{[build_dir filesep s_function_file_name_base], [build_dir filesep c_file_name_base]}};
         """)
+      for e in artifacts:
+        if ".c" in e.name:
+          out.write(f"""           files = [files {{[build_dir filesep '{os.path.basename(e.name)}']}}];\n""")
       if use_codegen:
         out.write(f"""
           files=[files {{ [build_dir filesep casadi_codegen_file_name_base]}}];
