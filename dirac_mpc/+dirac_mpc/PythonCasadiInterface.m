@@ -127,7 +127,11 @@ classdef PythonCasadiInterface < handle
             elseif has_matlab
               name = [a{2} '.' a{end}];
               h = str2func(name);
-              out = h(e);
+              try
+                out = h(e);
+              catch
+                out = e;
+              end
             elseif py.hasattr(e,'__call__')
               out = @(varargin) obj.apply(e,varargin{:});
             else
