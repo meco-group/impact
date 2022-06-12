@@ -815,12 +815,14 @@ class MPC(Ocp):
     [_,states] = self.sample(self.x,grid='control')
     [_,algebraics] = self.sample(self.z,grid='control')
     [_,controls] = self.sample(self.u,grid='control-')
-    parameters_symbols = self.parameters['']+self.parameters['control']
+    parameters_symbols = self.parameters['']+self.parameters['control']+self.parameters['control+']
     parameters = []
     for p in self.parameters['']:
       parameters.append(self.value(p))
     for p in self.parameters['control']:
       parameters.append(self.sample(p,grid='control-')[1])
+    for p in self.parameters['control+']:
+      parameters.append(self.sample(p,grid='control')[1])
     casadi_fun_name = 'ocpfun'
     is_coll = False
     if hasattr(self._method, "Xc"):
@@ -830,6 +832,7 @@ class MPC(Ocp):
     [_,variables_control] = self.sample(vvcat(self.variables['control']),grid='control-')
     [_,variables_states] = self.sample(vvcat(self.variables['states']),grid='control')
     lam_g = self._method.opti.lam_g
+    parameter_names = [p.name() for p in parameters_symbols]
 
 
     hotstart_symbol = veccat(variables,variables_control,variables_states,lam_g)
@@ -837,7 +840,7 @@ class MPC(Ocp):
     ocpfun = self.to_function(casadi_fun_name,
       [states]+(["z"] if is_coll else [MX()])+[controls]+parameters+[hotstart_symbol],
       [states,algebraics,controls,hotstart_symbol],
-      ['x0','z0','u0'] + [p.name() for p in self.parameters['']] + [p.name() for p in self.parameters['control']] + ['hotstart_in'],
+      ['x0','z0','u0'] + parameter_names + ['hotstart_in'],
       ['x','z','u','hotstart_out'])
 
     casadi_codegen_file_name_base = name+"_codegen.c"
@@ -901,20 +904,20 @@ class MPC(Ocp):
     gridfun = Function("grid_"+name,
       parameters,
       [self.sample(self.t, grid='control')[1]],
-      [p.name() for p in self.parameters['']] + [p.name() for p in self.parameters['control']],
+      parameter_names,
       ['grid'])
     if gridfun.has_free():
       gridfun = self.to_function("grid_"+name,
         parameters,
         [self.sample(self.t, grid='control')[1]],
-        [p.name() for p in self.parameters['']] + [p.name() for p in self.parameters['control']],
+        parameter_names,
         ['grid'])
     self.add_function(gridfun)
 
     costfun = Function("cost_"+name,
       [states]+[controls]+parameters,
       [self._method.opti.f],
-      ['x','u'] + [p.name() for p in self.parameters['']] + [p.name() for p in self.parameters['control']],
+      ['x','u'] + parameter_names,
       ['f']
     )
     if costfun.has_free():
@@ -976,7 +979,7 @@ class MPC(Ocp):
     if isinstance(z_nominal,float): z_nominal = np.array([z_nominal])
     if isinstance(u_nominal,float): u_nominal = np.array([u_nominal])
 
-    p_names = [p.name() for p in self.parameters['']+self.parameters['control']]
+    p_names = parameter_names
     x_names = [x.name() for x in self.states]
     z_names = [z.name() for z in self.algebraics]
     u_names = [u.name() for u in self.controls]
@@ -1360,7 +1363,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
       u_part_unit.append(u.numel())
       u_part_offset.append(u_part_offset[-1]+u.numel())
 
-    p_trajectory_length = [1 for p in self.parameters['']]+[self._method.N for p in self.parameters['control']]
+    p_trajectory_length = [1 for p in self.parameters['']]+[self._method.N for p in self.parameters['control']]+[self._method.N+1 for p in self.parameters['control+']]
     x_trajectory_length = [self._method.N+1 for x in self.states]
     z_trajectory_length = [self._method.N+1 for x in self.algebraics]
     u_trajectory_length = [self._method.N for x in self.controls]
