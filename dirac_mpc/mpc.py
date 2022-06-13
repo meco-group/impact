@@ -498,6 +498,12 @@ class MPC(Ocp):
     self.expr._register('p', {name: p})
     return p
 
+  def variable(self,name,*args,**kwargs):
+    v = MX.sym(name,*args)
+    self.register_variable(v,**kwargs)
+    self.expr._register('v', {name: v})
+    return v
+
   def add_function(self, fun):
     self._added_functions.append(fun)
 
