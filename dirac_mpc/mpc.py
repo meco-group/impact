@@ -734,6 +734,7 @@ class MPC(Ocp):
           CASADI_PREFIX(stats).sqp_stop_crit = s->sqp_stop_crit;
           CASADI_PREFIX(stats).n_sqp_iter = s->n_sqp_iter;
           CASADI_PREFIX(stats).n_qp_iter = s->n_qp_iter;
+          CASADI_PREFIX(stats).runtime = s->runtime;
           return &CASADI_PREFIX(stats);
         }
             """ + line
@@ -1146,6 +1147,7 @@ class MPC(Ocp):
           const impact_stats* stats = impact_get_stats(m);
           if (stats) {{
             printf("Number of outer iterations: %d\\n", stats->n_sqp_iter);
+            printf("Runtime [s]: %e\\n", stats->runtime);
           }} else {{
             printf("No stats available.\\n");
           }}
