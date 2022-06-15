@@ -1112,7 +1112,7 @@ class MPC(Ocp):
         #include <assert.h>
 
         int main() {{
-          int i, j, n_row, n_col;
+          int i, j, n_row, n_col, flag;
           double *u_scratch, *x_scratch;
           {prefix}struct* m = impact_initialize(printf, 0);
           if (!m) {{
@@ -1139,14 +1139,17 @@ class MPC(Ocp):
           impact_print_problem(m);
 
 
-
           printf("Start a solve.\\n");
-          impact_solve(m);
+          flag = impact_solve(m);
+          if (flag) {{
+            printf("Solve indicates a problem: return code %d.\\n", flag);
+          }}
           printf("Solve finished.\\n");
 
           const impact_stats* stats = impact_get_stats(m);
           if (stats) {{
             printf("Number of outer iterations: %d\\n", stats->n_sqp_iter);
+            printf("Stop criterion: %d\\n", stats->sqp_stop_crit);
             printf("Runtime [s]: %e\\n", stats->runtime);
           }} else {{
             printf("No stats available.\\n");
