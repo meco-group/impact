@@ -301,7 +301,13 @@ def fun2s_function(fun, name=None, dir=".",ignore_errors=False):
           if (ret && {int(not ignore_errors)}) {{
               static char msg[{100+len(s_function_name)}];
               sprintf(msg, "SFunction '{s_function_name}' failed to compute (error code %d) at t=%.6fs.", ret, ssGetT(S));
-              ssSetLocalErrorStatus(S, msg);
+              #ifdef ssSetLocalErrorStatus
+                ssSetLocalErrorStatus(S, msg);
+              #else
+                #ifdef ssSetErrorStatus
+                  ssSetErrorStatus(S, msg);
+                #endif
+              #endif
           }}
 
           /* Release hold */
@@ -2253,7 +2259,13 @@ int {prefix}flag_value({prefix}struct* m, int index);
                 static char msg[{200+len(s_function_name)}];
                 sprintf(msg, "SFunction '{s_function_name}' failed to compute (error code %d) at t=%.6fs. "
                 "Export with ('ignore_errors', true) if you want the simulation to continue anyway.", ret, ssGetT(S));
-                ssSetLocalErrorStatus(S, msg);
+                #ifdef ssSetLocalErrorStatus
+                  ssSetLocalErrorStatus(S, msg);
+                #else
+                  #ifdef ssSetErrorStatus
+                    ssSetErrorStatus(S, msg);
+                  #endif
+                #endif
             }}
 
             i = 0;
