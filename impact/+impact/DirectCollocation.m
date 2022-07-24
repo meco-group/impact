@@ -11,13 +11,13 @@ classdef DirectCollocation < rockit.DirectMethod
       end
       global pythoncasadiinterface
       if isempty(pythoncasadiinterface)
-        pythoncasadiinterface = dirac_mpc.PythonCasadiInterface;
+        pythoncasadiinterface = impact.PythonCasadiInterface;
       end
       [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,0,{'degree','scheme','kwargs'});
       if isempty(kwargs)
-        obj.parent = py.dirac_mpc.DirectCollocation(args{:});
+        obj.parent = py.impact.DirectCollocation(args{:});
       else
-        obj.parent = py.dirac_mpc.DirectCollocation(args{:},pyargs(kwargs{:}));
+        obj.parent = py.impact.DirectCollocation(args{:},pyargs(kwargs{:}));
       end
     end
     function varargout = add_variables(obj,varargin)

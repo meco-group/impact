@@ -1,4 +1,4 @@
-from dirac_mpc import *
+from impact import *
 
 mpc = MPC(T=2.0)
 

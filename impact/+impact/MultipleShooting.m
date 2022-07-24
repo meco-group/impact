@@ -1,23 +1,23 @@
-classdef SingleShooting < rockit.DirectMethod
+classdef MultipleShooting < rockit.DirectMethod
   properties
   end
   methods
-    function obj = SingleShooting(varargin)
+    function obj = MultipleShooting(varargin)
       obj@rockit.DirectMethod('from_super');
       if length(varargin)==1 && ischar(varargin{1}) && strcmp(varargin{1},'from_super'),return,end
-      if length(varargin)==1 && isa(varargin{1},'py.rockit.single_shooting.SingleShooting')
+      if length(varargin)==1 && isa(varargin{1},'py.rockit.multiple_shooting.MultipleShooting')
         obj.parent = varargin{1};
         return
       end
       global pythoncasadiinterface
       if isempty(pythoncasadiinterface)
-        pythoncasadiinterface = dirac_mpc.PythonCasadiInterface;
+        pythoncasadiinterface = impact.PythonCasadiInterface;
       end
       [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,0,{'kwargs'});
       if isempty(kwargs)
-        obj.parent = py.dirac_mpc.SingleShooting(args{:});
+        obj.parent = py.impact.MultipleShooting(args{:});
       else
-        obj.parent = py.dirac_mpc.SingleShooting(args{:},pyargs(kwargs{:}));
+        obj.parent = py.impact.MultipleShooting(args{:},pyargs(kwargs{:}));
       end
     end
     function varargout = add_variables(obj,varargin)
