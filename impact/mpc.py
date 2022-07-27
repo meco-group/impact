@@ -1,3 +1,4 @@
+from re import X
 from rockit import Ocp
 from casadi import Function, MX, vcat, vvcat, veccat, GlobalOptions, vec, CodeGenerator
 from rockit.casadi_helpers import prepare_build_dir
@@ -512,6 +513,541 @@ class MPC(Ocp):
 
   def add_function(self, fun):
     self._added_functions.append(fun)
+
+  def add_simulink_fmu(self,name,verbose=True):
+    """
+    Not supported: 
+     * time dependence
+     * delays
+    Perhpas SS is better
+    Caveats:
+     * scaling for finite diff
+    """
+    from pathlib import Path
+    import zipfile
+    fmu_path = Path(name).resolve()
+    unzipped_path =  fmu_path.parent / fmu_path.stem
+    with zipfile.ZipFile(fmu_path, 'r') as zip_ref:
+        zip_ref.extractall(unzipped_path)
+
+    scalar_variables = []
+    with open(unzipped_path/ 'modelDescription.xml','r') as modelDescription_file:
+      tree = etree.parse(modelDescription_file)
+      for var in tree.find('.//ModelVariables').findall('ScalarVariable'):
+        scalar_variables.append(dict(var.items()))
+    
+    root = tree.find('.')
+    modelName = root.attrib["modelName"]
+    guid = root.attrib["guid"]
+    resource = "file://" + str(unzipped_path)
+    
+    dll_name = unzipped_path / "binaries" / "linux64" / "vdp"
+
+    u_i = [int(e["valueReference"]) for e in scalar_variables if e["causality"]=="input"]
+    y_i = [int(e["valueReference"]) for e in scalar_variables if e["causality"]=="output"]
+    x_i = [int(e["valueReference"]) for e in scalar_variables if e["causality"]=="parameter" and e["description"].startswith("x")]
+    assert len(y_i)==len(x_i)
+    p_i = [int(e["valueReference"]) for e in scalar_variables if e["causality"]=="parameter" and not e["description"].startswith("x")]
+    print(x_i,y_i)
+    
+    nu = len(u_i)
+    nx = len(x_i)
+    np = len(p_i)
+    print(nx)
+
+    def intlist(L):
+      return "{" + ", ".join(str(e) for e in L) + "}"
+    with open("fmi_wrapper.cpp","w") as fmi_wrapper:
+      fmi_wrapper.write(f"""
+#include <math.h>
+#include <vector>
+#include <iostream>
+#include <sstream>
+#include <exception>
+#include <stdarg.h>
+
+#ifdef _WIN32 // also for 64-bit
+#include <windows.h>
+#else // _WIN32
+#include <dlfcn.h>
+#endif // _WIN32
+
+#include <fmi2/fmi2Functions.h>
+
+#ifndef casadi_real
+#define casadi_real double
+#endif
+
+#ifndef casadi_int
+#define casadi_int long long int
+#endif
+
+std::string system_infix() {{
+#if defined(_WIN32)
+  // Windows system
+#ifdef _WIN64
+  return "win64";
+#else
+  return "win32";
+#endif
+#elif defined(__APPLE__)
+  // OSX
+  return sizeof(void*) == 4 ? "darwin32" : "darwin64";
+#else
+  // Linux
+  return sizeof(void*) == 4 ? "linux32" : "linux64";
+#endif
+}}
+
+std::string dll_suffix() {{
+#if defined(_WIN32)
+  // Windows system
+  return ".dll";
+#elif defined(__APPLE__)
+  // OSX
+  return ".dylib";
+#else
+  // Linux
+  return ".so";
+#endif
+}}
+
+
+/* Symbol visibility in DLLs */
+#ifndef CASADI_SYMBOL_EXPORT
+  #if defined(_WIN32) || defined(__WIN32__) || defined(__CYGWIN__)
+    #if defined(STATIC_LINKED)
+      #define CASADI_SYMBOL_EXPORT
+    #else
+      #define CASADI_SYMBOL_EXPORT __declspec(dllexport)
+    #endif
+  #elif defined(__GNUC__) && defined(GCC_HASCLASSVISIBILITY)
+    #define CASADI_SYMBOL_EXPORT __attribute__ ((visibility ("default")))
+  #else
+    #define CASADI_SYMBOL_EXPORT
+  #endif
+#endif
+
+
+std::vector<casadi_int> dense_vec(int n) {{
+    std::vector<casadi_int> ret = {{n , 1, 0, n}};
+    for (int i=0;i<n;++i) {{
+        ret.push_back(i);
+    }}
+    return ret;
+}}
+
+template<typename T>
+T* get_ptr(std::vector<T> &v) {{
+if (v.empty())
+  return nullptr;
+else
+  return &v.front();
+}}
+
+
+#if defined(_WIN32) // also for 64-bit
+    typedef HINSTANCE handle_t;
+#else
+    typedef void* handle_t;
+#endif
+
+  /// String representation, any type
+  template<typename T>
+  std::string str(const T& v);
+
+  // Implementations
+  template<typename T>
+  std::string str(const T& v) {{
+    std::stringstream ss;
+    ss << v;
+    return ss.str();
+  }}
+
+  handle_t init_handle(const std::string& name) {{
+    handle_t ret;
+#ifdef _WIN32
+    ret = LoadLibrary(TEXT(name.c_str()));
+    if (ret==0) {{
+      throw std::system_error(0, std::generic_category(), "CommonExternal: Cannot open \"" + name + "\". "
+      "Error code (WIN32): " + str(GetLastError()));
+    }}
+#else // _WIN32
+    ret = dlopen(name.c_str(), RTLD_LAZY);
+    if (ret==nullptr) {{
+      throw std::system_error(0, std::generic_category(), "CommonExternal: Cannot open \"" + name + "\". "
+      "Error code: " + str(dlerror()));
+    }}
+    // reset error
+    dlerror();
+#endif // _WIN32
+    return ret;
+  }}
+
+  void close_handle(handle_t h) {{
+    #ifdef _WIN32
+        if (h) FreeLibrary(h);
+    #else // _WIN32
+        if (h) dlclose(h);
+    #endif // _WIN32
+  }}
+
+  typedef void (*signal_t)(void);
+
+  signal_t get_function(handle_t h, const std::string& sym) {{
+#ifdef _WIN32
+    return (signal_t)GetProcAddress(h, TEXT(sym.c_str()));
+#else // _WIN32
+    signal_t fcnPtr = (signal_t)dlsym(h, sym.c_str());
+    if (dlerror()) {{
+      fcnPtr=nullptr;
+      dlerror(); // Reset error flags
+    }}
+    return fcnPtr;
+#endif // _WIN32
+  }}
+
+void logger(fmi2ComponentEnvironment componentEnvironment,
+    fmi2String instanceName,
+    fmi2Status status,
+    fmi2String category,
+    fmi2String message, ...) {{
+  // Variable number of arguments
+  va_list args;
+  va_start(args, message);
+  // Static & dynamic buffers
+  char buf[256];
+  size_t buf_sz = sizeof(buf);
+  char* buf_dyn = nullptr;
+  // Try to print with a small buffer
+  int n = vsnprintf(buf, buf_sz, message, args);
+  // Need a larger buffer?
+  if (n > buf_sz) {{
+    buf_sz = n + 1;
+    buf_dyn = new char[buf_sz];
+    n = vsnprintf(buf_dyn, buf_sz, message, args);
+  }}
+  // Print buffer content
+  if (n >= 0) {{
+    std::cout << "[" << instanceName << ":" << category << "] "
+      << (buf_dyn ? buf_dyn : buf) << std::endl;
+  }}
+  // Cleanup
+  delete[] buf_dyn;
+  va_end(args);
+  // Throw error if failure
+  if (n<=0) {{
+    throw std::runtime_error("Print failure while processing '" + std::string(message) + "'");
+  }}
+}}
+
+
+void my_assert(bool v, const std::string& msg) {{
+  if (!v) throw std::runtime_error(msg);
+}}
+
+class FMU {{
+  public:
+    FMU() {{
+      h_ = init_handle("{dll_name}"+dll_suffix());
+      instantiate_ = reinterpret_cast<fmi2InstantiateTYPE*>(get_function(h_,"fmi2Instantiate"));
+      free_instance_ = reinterpret_cast<fmi2FreeInstanceTYPE*>(get_function(h_,"fmi2FreeInstance"));
+      reset_ = reinterpret_cast<fmi2ResetTYPE*>(get_function(h_,"fmi2Reset"));
+      setup_experiment_ = reinterpret_cast<fmi2SetupExperimentTYPE*>(
+        get_function(h_,"fmi2SetupExperiment"));
+      enter_initialization_mode_ = reinterpret_cast<fmi2EnterInitializationModeTYPE*>(
+        get_function(h_,"fmi2EnterInitializationMode"));
+      exit_initialization_mode_ = reinterpret_cast<fmi2ExitInitializationModeTYPE*>(
+        get_function(h_,"fmi2ExitInitializationMode"));
+      get_real_ = reinterpret_cast<fmi2GetRealTYPE*>(get_function(h_,"fmi2GetReal"));
+      set_real_ = reinterpret_cast<fmi2SetRealTYPE*>(get_function(h_,"fmi2SetReal"));
+      get_integer_ = reinterpret_cast<fmi2GetIntegerTYPE*>(get_function(h_,"fmi2GetInteger"));
+      set_integer_ = reinterpret_cast<fmi2SetIntegerTYPE*>(get_function(h_,"fmi2SetInteger"));
+      get_boolean_ = reinterpret_cast<fmi2GetBooleanTYPE*>(get_function(h_,"fmi2GetBoolean"));
+      set_boolean_ = reinterpret_cast<fmi2SetBooleanTYPE*>(get_function(h_,"fmi2SetBoolean"));
+      get_string_ = reinterpret_cast<fmi2GetStringTYPE*>(get_function(h_,"fmi2GetString"));
+      set_string_ = reinterpret_cast<fmi2SetStringTYPE*>(get_function(h_,"fmi2SetString"));
+      do_step_ = reinterpret_cast<fmi2DoStepTYPE*>(get_function(h_,"fmi2DoStep"));
+
+      logging_on_ = {int(verbose)};
+      c_.resize(64);
+
+      c_[0] = instantiate();
+      setup_experiment(0);
+
+      u_i_ = {intlist(u_i)};
+      x_i_ = {intlist(x_i)};
+      y_i_ = {intlist(y_i)};
+      p_i_ = {intlist(p_i)};
+
+    }}
+    ~FMU() {{
+      close_handle(h_);
+    }}
+    fmi2Component instantiate() const {{
+      fmi2String instanceName = "{modelName}";
+      fmi2String fmuGUID = "{guid}";
+      fmi2String fmuResourceLocation = "{resource}";
+      fmi2Boolean visible = fmi2False;
+      static fmi2CallbackFunctions cbf;
+      cbf.logger = logger;
+      cbf.allocateMemory = calloc;
+      cbf.freeMemory = free;
+      cbf.stepFinished = 0;
+      cbf.componentEnvironment = 0;
+      fmi2Component c = instantiate_(instanceName, fmi2CoSimulation, fmuGUID, fmuResourceLocation,
+        &cbf, visible, logging_on_);
+      return c;
+    }}
+
+    int setup_experiment(int mem) const {{
+      // Call fmi2SetupExperiment
+      fmi2Status status = setup_experiment_(c_[mem], fmi2False, 0, 0., fmi2True, 1.);
+      if (status != fmi2OK) {{
+        std::cerr << "fmi2SetupExperiment failed: " << status << std::endl;
+        return 1;
+      }}
+      return 0;
+    }}
+
+    int reset(int mem) const {{
+      fmi2Status status = reset_(c_[mem]);
+      if (status != fmi2OK) {{
+        std::cerr << "fmi2Reset failed: " << status << std::endl;
+        return 1;
+      }}
+      return 0;
+    }}
+
+    int enter_initialization_mode(int mem) const {{
+      fmi2Status status = enter_initialization_mode_(c_[mem]);
+      if (status != fmi2OK) {{
+        std::cerr << "fmi2EnterInitializationMode failed: " << status << std::endl;
+        return 1;
+      }}
+      return 0;
+    }}
+
+    int exit_initialization_mode(int mem) const {{
+      fmi2Status status = exit_initialization_mode_(c_[mem]);
+      if (status != fmi2OK) {{
+        std::cerr << "fmi2ExitInitializationMode failed: " << status << std::endl;
+        return 1;
+      }}
+      return 0;
+    }}
+
+    int set_x(int mem, const double* x) {{
+      fmi2Status status = set_real_(c_[mem], get_ptr(x_i_), x_i_.size(), x);
+      if (status != fmi2OK) {{
+        std::cerr << "fmi2SetReal x failed: " << status << std::endl;
+        return 1;
+      }}
+      return 0;
+    }}
+    int set_u(int mem, const double* u) {{
+      fmi2Status status = set_real_(c_[mem], get_ptr(u_i_), u_i_.size(), u);
+      if (status != fmi2OK) {{
+        std::cerr << "fmi2SetReal u failed: " << status << std::endl;
+        return 1;
+      }}
+      return 0;
+    }}
+    int set_p(int mem, const double* p) {{
+      fmi2Status status = set_real_(c_[mem], get_ptr(p_i_), p_i_.size(), p);
+      if (status != fmi2OK) {{
+        std::cerr << "fmi2SetReal p failed: " << status << std::endl;
+        return 1;
+      }}
+      return 0;
+    }}
+
+    int get_x(int mem, double* x) {{
+      fmi2Status status = get_real_(c_[mem], get_ptr(y_i_), y_i_.size(), x);
+      if (status != fmi2OK) {{
+        std::cerr << "fmi2GetReal x failed: " << status << std::endl;
+        return 1;
+      }}
+      return 0;
+    }}
+
+    int do_step(int mem, double dt) {{
+      fmi2Status status = do_step_(c_[mem], 0, dt, fmi2False);
+      if (status != fmi2OK) {{
+        std::cerr << "fmi2DosStep x failed: " << status << std::endl;
+        return 1;
+      }}
+      return 0;
+    }}
+  
+  private:
+    handle_t h_;
+    fmi2InstantiateTYPE* instantiate_;
+    fmi2FreeInstanceTYPE* free_instance_;
+    fmi2ResetTYPE* reset_;
+    fmi2SetupExperimentTYPE* setup_experiment_;
+    fmi2EnterInitializationModeTYPE* enter_initialization_mode_;
+    fmi2ExitInitializationModeTYPE* exit_initialization_mode_;
+    fmi2GetRealTYPE* get_real_;
+    fmi2SetRealTYPE* set_real_;
+    fmi2GetBooleanTYPE* get_boolean_;
+    fmi2SetBooleanTYPE* set_boolean_;
+    fmi2GetIntegerTYPE* get_integer_;
+    fmi2SetIntegerTYPE* set_integer_;
+    fmi2GetStringTYPE* get_string_;
+    fmi2SetStringTYPE* set_string_;
+    fmi2GetDirectionalDerivativeTYPE* get_directional_derivative_;
+    fmi2DoStepTYPE* do_step_;
+
+    std::vector<fmi2Component> c_;
+    std::vector<fmi2ValueReference> x_i_;
+    std::vector<fmi2ValueReference> y_i_;
+    std::vector<fmi2ValueReference> u_i_;
+    std::vector<fmi2ValueReference> p_i_;
+
+    bool logging_on_;
+}};
+
+static FMU fmu;
+
+#ifdef __cplusplus
+extern "C" {{
+#endif
+
+
+CASADI_SYMBOL_EXPORT int F(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem){{
+  // do_step seems to do an univertible operation on time -> reset+setup_experiment
+  if (fmu.setup_experiment(mem)) return 1;
+  if (fmu.enter_initialization_mode(mem)) return 1;
+  if (fmu.set_x(mem, arg[0])) return 1;
+  if (fmu.set_u(mem, arg[1])) return 1;
+  if (fmu.set_p(mem, arg[2])) return 1;
+  if (fmu.exit_initialization_mode(mem)) return 1;
+  if (fmu.do_step(mem, arg[4][0])) return 1;
+  if (fmu.get_x(mem, res[0])) return 1;
+  if (fmu.reset(mem)) return 1;
+  return 0;
+}}
+
+CASADI_SYMBOL_EXPORT int F_alloc_mem(void) {{
+  return 0;
+}}
+
+CASADI_SYMBOL_EXPORT int F_init_mem(int mem) {{
+  std::cout << "test init" << std::endl;
+  return 0;
+}}
+
+CASADI_SYMBOL_EXPORT void F_free_mem(int mem) {{
+}}
+
+CASADI_SYMBOL_EXPORT int F_checkout(void) {{
+  return 0;
+}}
+
+CASADI_SYMBOL_EXPORT void F_release(int mem) {{
+}}
+
+
+
+CASADI_SYMBOL_EXPORT void F_incref(void) {{
+}}
+
+CASADI_SYMBOL_EXPORT void F_decref(void) {{
+}}
+
+CASADI_SYMBOL_EXPORT casadi_int F_n_in(void) {{ return 5;}}
+
+CASADI_SYMBOL_EXPORT casadi_int F_n_out(void) {{ return 1;}}
+
+CASADI_SYMBOL_EXPORT casadi_real F_default_in(casadi_int i) {{
+  switch (i) {{
+    default: return 0;
+  }}
+}}
+
+CASADI_SYMBOL_EXPORT const char* F_name_in(casadi_int i) {{
+  switch (i) {{
+    case 0: return "x";
+    case 1: return "u";
+    case 2: return "p";
+    case 3: return "t";
+    case 4: return "dt";
+    default: return 0;
+  }}
+}}
+
+CASADI_SYMBOL_EXPORT const char* F_name_out(casadi_int i) {{
+  switch (i) {{
+    case 0: return "xp";
+    default: return 0;
+  }}
+}}
+
+CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_in(casadi_int i) {{
+  switch (i) {{
+    case 0: 
+      {{
+        static std::vector<casadi_int> sp_x = dense_vec({nx});
+        return get_ptr(sp_x);
+      }}
+      break;
+    case 1:
+      {{
+        static std::vector<casadi_int> sp_u = dense_vec({nu});
+        return get_ptr(sp_u);
+      }}
+      break;
+    case 2:
+      {{
+        static std::vector<casadi_int> sp_p = dense_vec({np});
+        return get_ptr(sp_p);
+      }}
+      break;
+    case 3:
+    case 4:
+      {{
+        static std::vector<casadi_int> sp_t = dense_vec(1);
+        return get_ptr(sp_t);
+      }}
+      break;
+    default: return 0;
+  }}
+}}
+
+CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
+  switch (i) {{
+    case 0: 
+      {{
+        static std::vector<casadi_int> sp_x = dense_vec({nx});
+        return get_ptr(sp_x);
+      }}
+      break;
+    default: return 0;
+  }}
+}}
+
+
+#ifdef __cplusplus
+}} /* extern "C" */
+#endif
+      """)
+
+    import subprocess
+    from pathlib import Path
+    cmd = f"g++ fmi_wrapper.cpp -std=c++11 -I{Path(__file__).parent.parent / 'interfaces'} -shared -fPIC -o fmi_wrapper.so"
+    print(cmd)
+    subprocess.run(cmd, shell=True)
+    F = casadi.external("F", "fmi_wrapper.so",{"enable_fd":True})
+    print(F)
+
+    x = self.state(nx)
+    u = self.control(nu)
+    p = self.parameter("fmu_p",np)
+
+    self.set_next(x, F(x, u, p, self.t, 0.1))
+
+    return F
 
   def add_model(self,name,file_name):
     # Read meta information
