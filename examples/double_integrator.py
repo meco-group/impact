@@ -1,4 +1,4 @@
-from dirac_mpc import *
+from impact import *
 import casadi as cs
 
 mpc = MPC(T=5.25)

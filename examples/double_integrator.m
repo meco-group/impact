@@ -1,6 +1,6 @@
-addpath(char(py.dirac_mpc.matlab_path))
+addpath(char(py.impact.matlab_path))
 
-import dirac_mpc.*
+import impact.*
 
 mpc = MPC('T',5.25);
 

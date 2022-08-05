@@ -51,6 +51,25 @@ classdef MPC < rockit.Ocp & rockit.Stage
       end
       varargout = pythoncasadiinterface.python2matlab_ret(res);
     end
+    function varargout = add_simulink_fmu(obj,varargin)
+      % 
+      % Arguments: name, verbose=True
+      %     Not supported: 
+      %      * time dependence
+      %      * delays
+      %     Perhpas SS is better
+      %     Caveats:
+      %      * scaling for finite diff
+      %     
+      global pythoncasadiinterface
+      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,1,{'name','verbose'});
+      if isempty(kwargs)
+        res = obj.parent.add_simulink_fmu(args{:});
+      else
+        res = obj.parent.add_simulink_fmu(args{:},pyargs(kwargs{:}));
+      end
+      varargout = pythoncasadiinterface.python2matlab_ret(res);
+    end
     function varargout = add_model(obj,varargin)
       global pythoncasadiinterface
       [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,2,{'name','file_name'});

@@ -1,4 +1,4 @@
-graft dirac_mpc/+dirac_mpc
-graft dirac_mpc/templates/python
-graft dirac_mpc/templates/simulink
+graft impact/+impact
+graft impact/templates/python
+graft impact/templates/simulink
 

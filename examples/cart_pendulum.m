@@ -1,4 +1,4 @@
-addpath(char(py.dirac_mpc.matlab_path))
+addpath(char(py.impact.matlab_path))
 
 import impact.*
 
