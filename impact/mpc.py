@@ -1188,7 +1188,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
     return m
 
   @staticmethod
-  def patch_codegen(name,ocp):
+  def patch_codegen(name,ocp,qp_error_on_fail=True):
     import re
     with open(name,'r') as fin:
       lines = fin.readlines()
@@ -1246,6 +1246,13 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
         
         if "/* Detecting indefiniteness */" in line:
           qp = False
+
+        if qp_error_on_fail:
+          if "d.dlam+" in line and "res" in line:
+            line = line + "int flag="
+
+          if "Detecting indefiniteness" in line:
+            line = "if (flag) return -100;\n" + line
 
         if "#include <math.h>" in line:
           line = "#include <time.h>\n" + line
@@ -1342,7 +1349,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
     return self._method.opti.p
 
 
-  def export(self,name,src_dir=".",use_codegen=None,context=None,ignore_errors=False,short_output=True):
+  def export(self,name,src_dir=".",use_codegen=None,context=None,ignore_errors=False,short_output=True,qp_error_on_fail=True):
     build_dir_rel = name+"_build_dir"
     build_dir_abs = os.path.join(os.path.abspath(src_dir),build_dir_rel)
 
@@ -1491,7 +1498,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
           raise Exception("use_codegen argument was True, but not supported.")
       else:
         use_codegen = True
-        self.patch_codegen(casadi_codegen_file_name, self)
+        self.patch_codegen(casadi_codegen_file_name, self,qp_error_on_fail=qp_error_on_fail)
     print("use_codegen", use_codegen)
     casadi_file_name = os.path.join(build_dir_abs,name+".casadi")
     ocpfun.save(casadi_file_name)
