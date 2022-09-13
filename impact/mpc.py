@@ -499,13 +499,21 @@ class MPC(Ocp):
   def expr(self):
       return self._expr
 
-  def parameter(self,name,*args,**kwargs):
+  def parameter(self,*args,**kwargs):
+    name = "p"
+    if len(args)>0 and isinstance(args[0],str):
+        name = args[0]
+        args = args[1:]
     p = MX.sym(name,*args)
     self.register_parameter(p,**kwargs)
     self.expr._register('p', {name: p})
     return p
 
-  def variable(self,name,*args,**kwargs):
+  def variable(self,*args,**kwargs):
+    name = "v"
+    if len(args)>0 and isinstance(args[0],str):
+        name = args[0]
+        args = args[1:]
     v = MX.sym(name,*args)
     self.register_variable(v,**kwargs)
     self.expr._register('v', {name: v})
