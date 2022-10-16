@@ -40,3 +40,9 @@ mpc.set_value(weights, [1,1])
 mpc.method(MultipleShooting('N',50,'M',1,'intg','rk'))
 
 mpc.export('cart_pend')
+
+
+mpc.save('cart_pendulum.impact');
+
+mpc2 = MPC.load('cart_pendulum.impact');
+mpc2.export('cart_pend2')

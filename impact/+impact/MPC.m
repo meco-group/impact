@@ -154,7 +154,7 @@ classdef MPC < rockit.Ocp & rockit.Stage
 
     varargin = [varargin {'context','matlab'}];
       global pythoncasadiinterface
-      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,1,{'name','src_dir','use_codegen','context','ignore_errors','short_output'});
+      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,1,{'name','src_dir','use_codegen','context','ignore_errors','short_output','qp_error_on_fail'});
       if isempty(kwargs)
         res = obj.parent.export(args{:});
       else
@@ -169,30 +169,41 @@ classdef MPC < rockit.Ocp & rockit.Stage
     run('build.m');
     cd(current);
     end
+    function varargout = save(obj,varargin)
+      global pythoncasadiinterface
+      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,1,{'name'});
+      if isempty(kwargs)
+        res = obj.parent.save(args{:});
+      else
+        res = obj.parent.save(args{:},pyargs(kwargs{:}));
+      end
+      varargout = pythoncasadiinterface.python2matlab_ret(res);
+    end
     function out = expr(obj)
       global pythoncasadiinterface
       out = pythoncasadiinterface.python2matlab(obj.parent.expr);
     end
-    function out = patch_codegen(obj)
-      % staticmethod(function) -> method
-      % 
-      % Convert a function to be a static method.
-      % 
-      % A static method does not receive an implicit first argument.
-      % To declare a static method, use this idiom:
-      % 
-      %      class C:
-      %          @staticmethod
-      %          def f(arg1, arg2, ...):
-      %              ...
-      % 
-      % It can be called either on the class (e.g. C.f()) or on an instance
-      % (e.g. C().f()).  The instance is ignored except for its class.
-      % 
-      % Static methods in Python are similar to those found in Java or C++.
-      % For a more advanced concept, see the classmethod builtin.
+  end
+  methods(Static)
+    function varargout = patch_codegen(varargin)
       global pythoncasadiinterface
-      out = pythoncasadiinterface.python2matlab(obj.parent.patch_codegen);
+      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,1,{'name','ocp','qp_error_on_fail'});
+      if isempty(kwargs)
+        res = py.impact.mpc.MPC.patch_codegen(args{:});
+      else
+        res = py.impact.mpc.MPC.patch_codegen(args{:},pyargs(kwargs{:}));
+      end
+      varargout = pythoncasadiinterface.python2matlab_ret(res);
+    end
+    function varargout = load(varargin)
+      global pythoncasadiinterface
+      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,0,{'name'});
+      if isempty(kwargs)
+        res = py.impact.mpc.MPC.load(args{:});
+      else
+        res = py.impact.mpc.MPC.load(args{:},pyargs(kwargs{:}));
+      end
+      varargout = pythoncasadiinterface.python2matlab_ret(res);
     end
   end
 end

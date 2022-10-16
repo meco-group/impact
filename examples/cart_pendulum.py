@@ -34,6 +34,10 @@ mpc.set_value(weights, [1,1])
 # Make it concrete for this ocp
 mpc.method(MultipleShooting(N=50,M=1,intg='rk'))
 
-mpc.export("cart_pendulum")
+mpc.save("cart_pendulum.impact")
+
+mpc.export("cart_pendulum",qp_error_on_fail=False)
 
 
+mpc2 = MPC.load("cart_pendulum.impact")
+mpc2.export("cart_pendulum2",qp_error_on_fail=False)

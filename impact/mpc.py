@@ -1,5 +1,5 @@
 from re import X
-from rockit import Ocp
+from rockit import Ocp, rockit_pickle_context, rockit_unpickle_context
 from casadi import Function, MX, vcat, vvcat, veccat, GlobalOptions, vec, CodeGenerator
 from rockit.casadi_helpers import prepare_build_dir
 import casadi
@@ -3100,3 +3100,15 @@ plt.show()
       cmake --install build --prefix .
       """)
     print("success")
+
+  def save(self,name):
+      self._untranscribe()
+      import pickle
+      with rockit_pickle_context():
+          pickle.dump(self,open(name,"wb"))
+
+  @staticmethod
+  def load(name):
+      import pickle
+      with rockit_unpickle_context():
+          return pickle.load(open(name,"rb"))
