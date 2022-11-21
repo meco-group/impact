@@ -36,6 +36,9 @@ solver_stats_type = Struct("solver_stats_bus",fields)
 
 solver_stats_c_type = Struct("solver_stats",fields)
 
+def escape(e):
+  return e.replace('\\','/')
+  
 def field_type_to_DataType(t):
   if t=="double":
     return "double"
@@ -185,7 +188,7 @@ class Model(DotDict):
       self._update({'n'+key: s._numel},allow_keyword=True)
       return s
 
-def fun2s_function(fun, name=None, dir=".",ignore_errors=False):
+def fun2s_function(fun, name=None, dir=".",ignore_errors=False,build_dir_abs=None):
     fun_name = fun.name()
     if name is None:
       name = fun_name
@@ -194,6 +197,14 @@ def fun2s_function(fun, name=None, dir=".",ignore_errors=False):
     cg = CodeGenerator(name, cg_options)
     cg.add(fun)
     code = cg.dump()
+    use_codegen = True
+    if "#error" in code:
+      use_codegen = False
+    print(f"Use codegen for {fun_name}? {use_codegen}")
+    if not use_codegen:
+      code = f"""#include <casadi/casadi_c.h>
+      #define casadi_int long long int
+      """
     for i in range(fun.n_in()):
       if not fun.sparsity_in(i).is_dense():
         raise Exception("Sparse inputs not supported")
@@ -204,6 +215,14 @@ def fun2s_function(fun, name=None, dir=".",ignore_errors=False):
     s_function_file_name_base = s_function_name+".c"
     s_function_file_name = os.path.join(dir,s_function_file_name_base)
 
+    def c_api(suffix):
+      if use_codegen:
+        if suffix=="eval":
+          return fun_name+"("
+        return fun_name+"_"+suffix+"("
+      else:
+        return "casadi_c_"+suffix+"_id(id" + ("," if suffix in ["eval","work","sparsity_in","sparsity_out","release"] else "")
+
     with open(s_function_file_name,"w") as out:
       out.write(f"""
         #define S_FUNCTION_NAME {s_function_name}
@@ -213,24 +232,54 @@ def fun2s_function(fun, name=None, dir=".",ignore_errors=False):
         {code}
 
         static int_T n_in, n_out;
-        static int_T sz_arg, sz_res, sz_iw, sz_w;
+        static casadi_int sz_arg, sz_res, sz_iw, sz_w;
+        static int id;
 
         static void mdlInitializeSizes(SimStruct *S) {{
+          int flag;
+          char casadi_file[2048];
           ssSetNumSFcnParams(S, 0);
           if (ssGetNumSFcnParams(S) != ssGetSFcnParamsCount(S)) {{
               return; /* Parameter mismatch will be reported by Simulink */
           }}
+        """)
 
+      if not use_codegen:
+        out.write(f"""
+          id = casadi_c_id("{fun_name}");
+          if (id<0) {{
+            flag = casadi_c_push_file("{escape(build_dir_abs)}/{name}.casadi");
+            if (flag) {{
+  #ifdef MATLAB_MEX_FILE
+                mexErrMsgIdAndTxt( "MATLAB:s_function:invalidParameter",
+                                  "Failed to initialize.");
+  #else
+                return;
+  #endif     
+            }}
+            id = casadi_c_id("{fun_name}");
+            if (id<0) {{
+  #ifdef MATLAB_MEX_FILE
+                mexErrMsgIdAndTxt( "MATLAB:s_function:invalidParameter",
+                                  "Could not locate function.");
+  #else
+                return;
+  #endif     
+            }}
+          }}
+        """)
+
+      out.write(f"""
         /* Read in CasADi function dimensions */
-        n_in  = {fun_name}_n_in();
-        n_out = {fun_name}_n_out();
-        {fun_name}_work(&sz_arg, &sz_res, &sz_iw, &sz_w);
-        
+        n_in  = {c_api("n_in")});
+        n_out = {c_api("n_out")});
+        {c_api("work")}&sz_arg, &sz_res, &sz_iw, &sz_w);
+
         /* Set up simulink input/output ports */
         int_T i;
         if (!ssSetNumInputPorts(S, n_in)) return;
         for (i=0;i<n_in;++i) {{
-          const int_T* sp = {fun_name}_sparsity_in(i);
+          const casadi_int* sp = {c_api("sparsity_in")}i);
           /* Dense inputs assumed here */
           ssSetInputPortDirectFeedThrough(S, i, 1);
           ssSetInputPortMatrixDimensions(S, i, sp[0], sp[1]);
@@ -239,7 +288,7 @@ def fun2s_function(fun, name=None, dir=".",ignore_errors=False):
 
         if (!ssSetNumOutputPorts(S, n_out)) return;
         for (i=0;i<n_out;++i) {{
-          const int_T* sp = {fun_name}_sparsity_out(i);
+          const casadi_int* sp = {c_api("sparsity_out")}i);
           /* Dense outputs assumed here */
           ssSetOutputPortMatrixDimensions(S, i, sp[0], sp[1]);
         }}
@@ -248,7 +297,7 @@ def fun2s_function(fun, name=None, dir=".",ignore_errors=False):
         
         /* Set up CasADi function work vector sizes */
         ssSetNumRWork(S, sz_w);
-        ssSetNumIWork(S, sz_iw);
+        ssSetNumIWork(S, 2*sz_iw);
         ssSetNumPWork(S, sz_arg+sz_res);
         ssSetNumNonsampledZCs(S, 0);
 
@@ -260,7 +309,7 @@ def fun2s_function(fun, name=None, dir=".",ignore_errors=False):
                     SS_OPTION_USE_TLC_WITH_ACCELERATOR);
 
         /* Signal that we want to use the CasADi Function */
-        {fun_name}_incref();
+        {c_api("incref")});
         }}
 
         static void mdlInitializeSampleTimes(SimStruct *S)
@@ -294,10 +343,10 @@ def fun2s_function(fun, name=None, dir=".",ignore_errors=False):
           /* Get a hold on a location to read/write persistant internal memory
           */
 
-          int mem = {fun_name}_checkout();
+          int mem = {c_api("checkout")});
 
           /* Run the CasADi function */
-          int_T ret = {fun_name}(arg,res,iw,w,mem);
+          int_T ret = {c_api("eval")}arg,res,iw,w,mem);
 
           if (ret && {int(not ignore_errors)}) {{
               static char msg[{100+len(s_function_name)}];
@@ -312,14 +361,20 @@ def fun2s_function(fun, name=None, dir=".",ignore_errors=False):
           }}
 
           /* Release hold */
-          {fun_name}_release(mem);
+          {c_api("release")}mem);
 
         }}
 
         static void mdlTerminate(SimStruct *S) {{
-          {fun_name}_decref();
-        }}
+          {c_api("decref")});
+          """)
 
+      if not use_codegen:
+          out.write(f"""
+            //casadi_c_pop();
+          """)
+
+      out.write(f"""}}
 
         #ifdef  MATLAB_MEX_FILE    /* Is this file being compiled as a MEX-file? */
         #include "simulink.c"      /* MEX-file interface mechanism */
@@ -1361,8 +1416,6 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
     build_dir_rel = name+"_build_dir"
     build_dir_abs = os.path.join(os.path.abspath(src_dir),build_dir_rel)
 
-    def escape(e):
-      return e.replace('\\','/')
 
     prepare_build_dir(build_dir_abs)
 
@@ -2870,7 +2923,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
     added_functions = []
     for fun in self._added_functions:
       fun.save(os.path.join(build_dir_abs, fun.name()+".casadi"))
-      added_functions.append(fun2s_function(fun, dir=build_dir_abs,ignore_errors=ignore_errors))
+      added_functions.append(fun2s_function(fun, dir=build_dir_abs,ignore_errors=ignore_errors,build_dir_abs=build_dir_abs))
 
     m_build_file_name = os.path.join(build_dir_abs,"build.m")
     with open(m_build_file_name,"w") as out:
