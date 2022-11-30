@@ -1300,7 +1300,13 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
                   "const solver_stats* ocpfun_stats() { return &CASADI_PREFIX(stats); }\n"+ \
                   line
         
-        if "struct casadi_sqpmethod_prob p;" in line:
+        # if "struct casadi_sqpmethod_prob p;" in line:
+          # line = "clock_t start_t, end_t;\nstart_t=clock();\n" + line
+
+        struct_strings = ["struct casadi_sqpmethod_prob p;",
+                          "struct casadi_feasiblesqpmethod_prob p;"]
+
+        if any(s in line for s in struct_strings):
           line = "clock_t start_t, end_t;\nstart_t=clock();\n" + line
 
         if "MAIN OPTIMIZATION LOOP" in line:
