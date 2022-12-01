@@ -2230,75 +2230,38 @@ int {prefix}flag_value({prefix}struct* m, int index);
             m->x_current->part_offset = {prefix}x_part_offset;
             m->x_current->part_unit = {prefix}x_part_unit;
             m->x_current->part_stride = {prefix}x_part_stride;
+      """)
 
-            m->x_initial_guess = malloc(sizeof({prefix}pool));
-            m->x_initial_guess->names = {prefix}x_names;
-            m->x_initial_guess->size = {x_nominal.size};
-            m->x_initial_guess->data = malloc(sizeof(casadi_real)*{max(x_nominal.size,1)});
-            m->x_initial_guess->n = {len(self.states)};
-            m->x_initial_guess->trajectory_length = {prefix}x_trajectory_length;
-            m->x_initial_guess->stride = {self.nx};
-            m->x_initial_guess->part_offset = {prefix}x_part_offset;
-            m->x_initial_guess->part_unit = {prefix}x_part_unit;
-            m->x_initial_guess->part_stride = {prefix}x_part_stride;
+      for name,d in [("x",{"nominal":x_nominal,"sym":self.states,"stride":self.nx}),
+                     ("z",{"nominal":z_nominal,"sym":self.algebraics,"stride":self.nz}),
+                     ("u",{"nominal":u_nominal,"sym":self.controls,"stride":self.nu})]:
+        out.write(f"""
+            m->{name}_initial_guess = malloc(sizeof({prefix}pool));
+            m->{name}_initial_guess->names = {prefix}{name}_names;
+            m->{name}_initial_guess->size = {d["nominal"].size};
+            m->{name}_initial_guess->data = malloc(sizeof(casadi_real)*{max(d["nominal"].size,1)});
+            m->{name}_initial_guess->n = {len(d["sym"])};
+            m->{name}_initial_guess->trajectory_length = {prefix}{name}_trajectory_length;
+            m->{name}_initial_guess->stride = {d["stride"]};
+            m->{name}_initial_guess->part_offset = {prefix}{name}_part_offset;
+            m->{name}_initial_guess->part_unit = {prefix}{name}_part_unit;
+            m->{name}_initial_guess->part_stride = {prefix}{name}_part_stride;
 
-            m->z_initial_guess = malloc(sizeof({prefix}pool));
-            m->z_initial_guess->names = {prefix}z_names;
-            m->z_initial_guess->size = {z_nominal.size};
-            m->z_initial_guess->data = malloc(sizeof(casadi_real)*{max(z_nominal.size,1)});
-            m->z_initial_guess->n = {len(self.algebraics)};
-            m->z_initial_guess->trajectory_length = {prefix}z_trajectory_length;
-            m->z_initial_guess->stride = {self.nz};
-            m->z_initial_guess->part_offset = {prefix}z_part_offset;
-            m->z_initial_guess->part_unit = {prefix}z_part_unit;
-            m->z_initial_guess->part_stride = {prefix}z_part_stride;
+            m->{name}_opt = malloc(sizeof({prefix}pool));
+            m->{name}_opt->names = {prefix}{name}_names;
+            m->{name}_opt->size = {d["nominal"].size};
+            m->{name}_opt->data = malloc(sizeof(casadi_real)*{max(d["nominal"].size,1)});
+            m->{name}_opt->n = {len(d["sym"])};
+            m->{name}_opt->trajectory_length = {prefix}{name}_trajectory_length;
+            m->{name}_opt->stride = {d["stride"]};
+            m->{name}_opt->part_offset = {prefix}{name}_part_offset;
+            m->{name}_opt->part_unit = {prefix}{name}_part_unit;
+            m->{name}_opt->part_stride = {prefix}{name}_part_stride;
+            """)
 
-            m->u_initial_guess = malloc(sizeof({prefix}pool));
-            m->u_initial_guess->names = {prefix}u_names;
-            m->u_initial_guess->size = {u_nominal.size};
-            m->u_initial_guess->data = malloc(sizeof(casadi_real)*{max(u_nominal.size,1)});
-            m->u_initial_guess->n = {len(self.controls)};
-            m->u_initial_guess->trajectory_length = {prefix}u_trajectory_length;
-            m->u_initial_guess->stride = {self.nu};
-            m->u_initial_guess->part_offset = {prefix}u_part_offset;
-            m->u_initial_guess->part_unit = {prefix}u_part_unit;
-            m->u_initial_guess->part_stride = {prefix}u_part_stride;
-
+      out.write(f"""
             m->hotstart_in = malloc(sizeof(casadi_real)*{max(hotstart_symbol.numel(),1)});
             m->hotstart_out = malloc(sizeof(casadi_real)*{max(hotstart_symbol.numel(),1)});
-
-            m->u_opt = malloc(sizeof({prefix}pool));
-            m->u_opt->names = {prefix}u_names;
-            m->u_opt->size = {u_nominal.size};
-            m->u_opt->data = malloc(sizeof(casadi_real)*{max(u_nominal.size,1)});
-            m->u_opt->n = {len(self.controls)};
-            m->u_opt->trajectory_length = {prefix}u_trajectory_length;
-            m->u_opt->stride = {self.nu};
-            m->u_opt->part_offset = {prefix}u_part_offset;
-            m->u_opt->part_unit = {prefix}u_part_unit;
-            m->u_opt->part_stride = {prefix}u_part_stride;
-
-            m->z_opt = malloc(sizeof({prefix}pool));
-            m->z_opt->names = {prefix}z_names;
-            m->z_opt->size = {z_nominal.size};
-            m->z_opt->data = malloc(sizeof(casadi_real)*{max(z_nominal.size,1)});
-            m->z_opt->n = {len(self.algebraics)};
-            m->z_opt->trajectory_length = {prefix}z_trajectory_length;
-            m->z_opt->stride = {self.nz};
-            m->z_opt->part_offset = {prefix}z_part_offset;
-            m->z_opt->part_unit = {prefix}z_part_unit;
-            m->z_opt->part_stride = {prefix}z_part_stride;
-
-            m->x_opt = malloc(sizeof({prefix}pool));
-            m->x_opt->names = {prefix}x_names;
-            m->x_opt->size = {x_nominal.size};
-            m->x_opt->data = malloc(sizeof(casadi_real)*{max(x_nominal.size,1)});
-            m->x_opt->n = {len(self.states)};
-            m->x_opt->trajectory_length = {prefix}x_trajectory_length;
-            m->x_opt->stride = {self.nx};
-            m->x_opt->part_offset = {prefix}x_part_offset;
-            m->x_opt->part_unit = {prefix}x_part_unit;
-            m->x_opt->part_stride = {prefix}x_part_stride;
 
             memcpy(m->p->data, {prefix}p_nominal, {p_nominal.size}*sizeof(casadi_real));
             memcpy(m->x_opt->data, {prefix}x_nominal, {x_nominal.size}*sizeof(casadi_real));
