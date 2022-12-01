@@ -555,20 +555,22 @@ class MPC(Ocp):
       return self._expr
 
   def parameter(self,*args,**kwargs):
-    name = "p"
     if len(args)>0 and isinstance(args[0],str):
         name = args[0]
         args = args[1:]
+    else:
+      name = "p%d" % self.np
     p = MX.sym(name,*args)
     self.register_parameter(p,**kwargs)
     self.expr._register('p', {name: p})
     return p
 
   def variable(self,*args,**kwargs):
-    name = "v"
     if len(args)>0 and isinstance(args[0],str):
         name = args[0]
         args = args[1:]
+    else:
+      name = "v%d" % self.nv
     v = MX.sym(name,*args)
     self.register_variable(v,**kwargs)
     self.expr._register('v', {name: v})
