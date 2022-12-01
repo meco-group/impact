@@ -1448,25 +1448,31 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
       parameters.append(self.sample(p,grid='control-')[1])
     for p in self.parameters['control+']:
       parameters.append(self.sample(p,grid='control')[1])
+    variables = []
+    variables_symbols = self.variables['']+self.variables['control']+self.variables['control+']
+    for v in self.variables['']:
+      variables.append(self.value(v))
+    for v in self.variables['control']:
+      variables.append(self.sample(v,grid='control-')[1])
+    for v in self.variables['control+']:
+      variables.append(self.sample(v,grid='control')[1])
+
     casadi_fun_name = 'ocpfun'
     is_coll = False
     if hasattr(self._method, "Xc"):
       is_coll = True
 
-    variables = self.value(vvcat(self.variables['']))
-    [_,variables_control] = self.sample(vvcat(self.variables['control']),grid='control-')
-    [_,variables_states] = self.sample(vvcat(self.variables['states']),grid='control')
     lam_g = self._method.opti.lam_g
     parameter_names = [p.name() for p in parameters_symbols]
+    variable_names = [v.name() for v in variables_symbols]
 
-
-    hotstart_symbol = veccat(variables,variables_control,variables_states,lam_g)
+    hotstart_symbol = lam_g
     
     ocpfun = self.to_function(casadi_fun_name,
-      [states]+(["z"] if is_coll else [MX()])+[controls]+parameters+[hotstart_symbol],
-      [states,algebraics,controls,hotstart_symbol],
-      ['x0','z0','u0'] + parameter_names + ['hotstart_in'],
-      ['x','z','u','hotstart_out'])
+      [states]+(["z"] if is_coll else [MX()])+[controls]+[vvcat(variables)]+parameters+[hotstart_symbol],
+      [states,algebraics,controls,vvcat(variables),hotstart_symbol],
+      ['x0','z0','u0','v0'] + parameter_names + ['hotstart_in'],
+      ['x','z','u','v'] + ['hotstart_out'])
 
     casadi_codegen_file_name_base = name+"_codegen.c"
     casadi_codegen_file_name = os.path.join(build_dir_abs,casadi_codegen_file_name_base)
@@ -1588,26 +1594,33 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
       return ",".join(elems)
 
 
-    pool_names = ["x_initial_guess","z_initial_guess","u_initial_guess","p","x_opt","z_opt","u_opt"]
+    pool_names = ["x_initial_guess","z_initial_guess","u_initial_guess","v_initial_guess","p","x_opt","z_opt","u_opt","v_opt"]
 
     p_offsets = [0]
     for p in parameters:
       p_offsets.append(p_offsets[-1]+p.numel())
 
+    v_offsets = [0]
+    for v in variables:
+      v_offsets.append(v_offsets[-1]+v.numel())
+
     p_nominal = self.initial_value(vvcat(parameters))
     x_nominal = self.initial_value(vec(states))
     z_nominal = self.initial_value(vec(algebraics))
     u_nominal = self.initial_value(vec(controls))
+    v_nominal = self.initial_value(vvcat(variables))
 
     if isinstance(p_nominal,float): p_nominal = np.array([p_nominal])
     if isinstance(x_nominal,float): x_nominal = np.array([x_nominal])
     if isinstance(z_nominal,float): z_nominal = np.array([z_nominal])
     if isinstance(u_nominal,float): u_nominal = np.array([u_nominal])
+    if isinstance(v_nominal,float): v_nominal = np.array([v_nominal])
 
     p_names = parameter_names
     x_names = [x.name() for x in self.states]
     z_names = [z.name() for z in self.algebraics]
     u_names = [u.name() for u in self.controls]
+    v_names = variable_names
 
 
     hello_p_normal_name = None
@@ -1630,6 +1643,13 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
       count += 1
       p_part_unit.append(p_symbol.numel())
       p_part_offset.append(p_part_offset[-1]+p_sampled.numel())
+
+
+    v_part_offset = [0]
+    v_part_unit = []
+    for v_symbol,v_sampled in zip(variables_symbols,variables):
+      v_part_unit.append(v_symbol.numel())
+      v_part_offset.append(v_part_offset[-1]+v_sampled.numel())
 
     if i_x_current is None:
       raise Exception("You must define a parameter named 'x_current'")
@@ -1954,6 +1974,10 @@ int {prefix}get_nz();
   \\brief Get number of (scalarized) inputs
 */
 int {prefix}get_nu();
+/**
+  \\brief Get number of (scalarized) variables
+*/
+int {prefix}get_nv();
 
 int {prefix}get_id_count({prefix}struct* m, const char* pool_name);
 int {prefix}get_id_from_index({prefix}struct* m, const char* pool_name, int index, const char** id);
@@ -1997,11 +2021,13 @@ int {prefix}flag_value({prefix}struct* m, int index);
     z_trajectory_length = [self._method.N+1 for x in self.algebraics]
     u_trajectory_length = [self._method.N for x in self.controls]
     x_current_trajectory_length = [1 for x in self.states]
+    v_trajectory_length = [1 for v in self.variables['']]+[self._method.N for v in self.variables['control']]+[self._method.N+1 for v in self.variables['control+']]
 
     p_part_stride = p_part_unit
     x_part_stride = [self.nx for x in self.states]
     z_part_stride = [self.nz for x in self.algebraics]
     u_part_stride = [self.nu for u in self.controls]
+    v_part_stride = v_part_unit
 
     def array_size(n):
       if n==0: return 1
@@ -2073,12 +2099,14 @@ int {prefix}flag_value({prefix}struct* m, int index);
             {prefix}pool* x_initial_guess;
             {prefix}pool* z_initial_guess;
             {prefix}pool* u_initial_guess;
+            {prefix}pool* v_initial_guess;
             {prefix}pool* p;
 
 
             {prefix}pool* x_opt;
             {prefix}pool* z_opt;
             {prefix}pool* u_opt;
+            {prefix}pool* v_opt;
 
             casadi_real* hotstart_in;
             casadi_real* hotstart_out;
@@ -2095,7 +2123,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
           #include <stdarg.h>
 """)
       # Write all data arrays
-      prim = ["x","z","u","p"]
+      prim = ["x","z","u","p","v"]
       def arrays():
         yield ("p_offsets","casadi_int")
         for p in prim: yield (f"{p}_part_offset","casadi_int")
@@ -2234,31 +2262,32 @@ int {prefix}flag_value({prefix}struct* m, int index);
             m->x_current->part_stride = {prefix}x_part_stride;
       """)
 
-      for name,d in [("x",{"nominal":x_nominal,"sym":self.states,"stride":self.nx}),
+      for sname,d in [("x",{"nominal":x_nominal,"sym":self.states,"stride":self.nx}),
                      ("z",{"nominal":z_nominal,"sym":self.algebraics,"stride":self.nz}),
-                     ("u",{"nominal":u_nominal,"sym":self.controls,"stride":self.nu})]:
+                     ("u",{"nominal":u_nominal,"sym":self.controls,"stride":self.nu}),
+                     ("v",{"nominal":v_nominal,"sym":variables,"stride":-1})]:
         out.write(f"""
-            m->{name}_initial_guess = malloc(sizeof({prefix}pool));
-            m->{name}_initial_guess->names = {prefix}{name}_names;
-            m->{name}_initial_guess->size = {d["nominal"].size};
-            m->{name}_initial_guess->data = malloc(sizeof(casadi_real)*{max(d["nominal"].size,1)});
-            m->{name}_initial_guess->n = {len(d["sym"])};
-            m->{name}_initial_guess->trajectory_length = {prefix}{name}_trajectory_length;
-            m->{name}_initial_guess->stride = {d["stride"]};
-            m->{name}_initial_guess->part_offset = {prefix}{name}_part_offset;
-            m->{name}_initial_guess->part_unit = {prefix}{name}_part_unit;
-            m->{name}_initial_guess->part_stride = {prefix}{name}_part_stride;
+            m->{sname}_initial_guess = malloc(sizeof({prefix}pool));
+            m->{sname}_initial_guess->names = {prefix}{sname}_names;
+            m->{sname}_initial_guess->size = {d["nominal"].size};
+            m->{sname}_initial_guess->data = malloc(sizeof(casadi_real)*{max(d["nominal"].size,1)});
+            m->{sname}_initial_guess->n = {len(d["sym"])};
+            m->{sname}_initial_guess->trajectory_length = {prefix}{sname}_trajectory_length;
+            m->{sname}_initial_guess->stride = {d["stride"]};
+            m->{sname}_initial_guess->part_offset = {prefix}{sname}_part_offset;
+            m->{sname}_initial_guess->part_unit = {prefix}{sname}_part_unit;
+            m->{sname}_initial_guess->part_stride = {prefix}{sname}_part_stride;
 
-            m->{name}_opt = malloc(sizeof({prefix}pool));
-            m->{name}_opt->names = {prefix}{name}_names;
-            m->{name}_opt->size = {d["nominal"].size};
-            m->{name}_opt->data = malloc(sizeof(casadi_real)*{max(d["nominal"].size,1)});
-            m->{name}_opt->n = {len(d["sym"])};
-            m->{name}_opt->trajectory_length = {prefix}{name}_trajectory_length;
-            m->{name}_opt->stride = {d["stride"]};
-            m->{name}_opt->part_offset = {prefix}{name}_part_offset;
-            m->{name}_opt->part_unit = {prefix}{name}_part_unit;
-            m->{name}_opt->part_stride = {prefix}{name}_part_stride;
+            m->{sname}_opt = malloc(sizeof({prefix}pool));
+            m->{sname}_opt->names = {prefix}{sname}_names;
+            m->{sname}_opt->size = {d["nominal"].size};
+            m->{sname}_opt->data = malloc(sizeof(casadi_real)*{max(d["nominal"].size,1)});
+            m->{sname}_opt->n = {len(d["sym"])};
+            m->{sname}_opt->trajectory_length = {prefix}{sname}_trajectory_length;
+            m->{sname}_opt->stride = {d["stride"]};
+            m->{sname}_opt->part_offset = {prefix}{sname}_part_offset;
+            m->{sname}_opt->part_unit = {prefix}{sname}_part_unit;
+            m->{sname}_opt->part_stride = {prefix}{sname}_part_stride;
             """)
 
       out.write(f"""
@@ -2269,6 +2298,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
             memcpy(m->x_opt->data, {prefix}x_nominal, {x_nominal.size}*sizeof(casadi_real));
             memcpy(m->z_opt->data, {prefix}z_nominal, {z_nominal.size}*sizeof(casadi_real));
             memcpy(m->u_opt->data, {prefix}u_nominal, {u_nominal.size}*sizeof(casadi_real));
+            memcpy(m->v_opt->data, {prefix}v_nominal, {v_nominal.size}*sizeof(casadi_real));
             for (i=0;i<{hotstart_symbol.numel()};++i) m->hotstart_out[i] = 0.0;
             {prefix}freshstart(m);
             return m;
@@ -2284,14 +2314,16 @@ int {prefix}flag_value({prefix}struct* m, int index);
             memcpy(m->x_initial_guess->data, {prefix}x_nominal, {x_nominal.size}*sizeof(casadi_real));
             memcpy(m->z_initial_guess->data, {prefix}z_nominal, {z_nominal.size}*sizeof(casadi_real));
             memcpy(m->u_initial_guess->data, {prefix}u_nominal, {u_nominal.size}*sizeof(casadi_real));
+            memcpy(m->v_initial_guess->data, {prefix}v_nominal, {v_nominal.size}*sizeof(casadi_real));
             for (i=0;i<{hotstart_symbol.numel()};++i) m->hotstart_in[i] = 0.0;
           }}
 
           void {prefix}hotstart({prefix}struct* m) {{
             int i;
             memcpy(m->x_initial_guess->data, m->x_opt->data, {x_nominal.size}*sizeof(casadi_real));
-            memcpy(m->u_initial_guess->data, m->u_opt->data, {u_nominal.size}*sizeof(casadi_real));
             memcpy(m->z_initial_guess->data, m->z_opt->data, {z_nominal.size}*sizeof(casadi_real));
+            memcpy(m->u_initial_guess->data, m->u_opt->data, {u_nominal.size}*sizeof(casadi_real));
+            memcpy(m->v_initial_guess->data, m->v_opt->data, {v_nominal.size}*sizeof(casadi_real));
             memcpy(m->hotstart_in, m->hotstart_out, {hotstart_symbol.numel()}*sizeof(casadi_real));
           }}
 
@@ -2315,14 +2347,18 @@ int {prefix}flag_value({prefix}struct* m, int index);
               free(m->z_initial_guess);
               free(m->u_initial_guess->data);
               free(m->u_initial_guess);
+              free(m->v_initial_guess->data);
+              free(m->v_initial_guess);
               free(m->hotstart_in);
               free(m->hotstart_out);
-              free(m->u_opt->data);
-              free(m->u_opt);
               free(m->x_opt->data);
               free(m->x_opt);
               free(m->z_opt->data);
-              free(m->z_opt);*/
+              free(m->z_opt);
+              free(m->u_opt->data);
+              free(m->u_opt);
+              free(m->v_opt->data);
+              free(m->v_opt);*/
               free(m);
             }}
           }}
@@ -2350,15 +2386,19 @@ int {prefix}flag_value({prefix}struct* m, int index);
               return m->z_initial_guess;
             }} else if (!strcmp(name,"u_initial_guess")) {{
               return  m->u_initial_guess;
+            }} else if (!strcmp(name,"v_initial_guess")) {{
+              return  m->v_initial_guess;
             }} else if (!strcmp(name,"x_opt")) {{
               return m->x_opt;
             }} else if (!strcmp(name,"z_opt")) {{
               return m->z_opt;
             }} else if (!strcmp(name,"u_opt")) {{
               return  m->u_opt;
+            }} else if (!strcmp(name,"v_opt")) {{
+              return  m->v_opt;
             }} else {{
               m->fatal(m, "get_pool_by_name", "Pool with name '%s' not recognized. \
-                                       Use one of: 'p','x_initial_guess','z_initial_guess','u_initial_guess','x_opt','z_opt','u_opt'. \\n", name);
+                                       Use one of: {pool_names}. \\n", name);
               return 0;
             }}
           }}
@@ -2430,8 +2470,13 @@ int {prefix}flag_value({prefix}struct* m, int index);
             }}
 
             if (index==-1) {{
-              *n_row = p->stride;
-              *n_col = p->trajectory_length[0];
+              if (p->stride>=0) {{
+                *n_row = p->stride;
+                *n_col = p->trajectory_length[0];
+              }} else {{
+                *n_row = p->size;
+                *n_col = 1;
+              }}
             }} else {{
               *n_row = p->part_unit[index];
               *n_col = p->trajectory_length[index];
@@ -2445,6 +2490,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
           int {prefix}get_nx() {{ return {self.nx}; }}
           int {prefix}get_nz() {{ return {self.nz}; }}
           int {prefix}get_nu() {{ return {self.nu}; }}
+          int {prefix}get_nv() {{ return {self.nv}; }}
 
           int {prefix}set_get({prefix}struct* m, const char* pool, const char* id, int stage, double* data, int data_flags, char mode) {{
             int i, j, k, index, i_start, i_stop, k_start, k_stop, offset, row, col, stride, data_i;
@@ -2565,14 +2611,16 @@ int {prefix}flag_value({prefix}struct* m, int index);
             m->arg_casadi[0] = m->x_initial_guess->data;
             m->arg_casadi[1] = m->z_initial_guess->data;
             m->arg_casadi[2] = m->u_initial_guess->data;
+            m->arg_casadi[3] = m->v_initial_guess->data;
             for (i=0;i<{len(parameters)};i++) {{
-              m->arg_casadi[3+i] = m->p->data + {prefix}p_offsets[i];
+              m->arg_casadi[4+i] = m->p->data + {prefix}p_offsets[i];
             }}
-            m->arg_casadi[3+{len(parameters)}] = m->hotstart_in;
+            m->arg_casadi[4+{len(parameters)}] = m->hotstart_in;
             m->res_casadi[0] = m->x_opt->data;
             m->res_casadi[1] = m->z_opt->data;
             m->res_casadi[2] = m->u_opt->data;
-            m->res_casadi[3] = m->hotstart_out;
+            m->res_casadi[3] = m->v_opt->data;
+            m->res_casadi[4] = m->hotstart_out;
             return {casadi_call("eval","m->arg_casadi","m->res_casadi","m->iw_casadi","m->w_casadi","m->mem")};
           }}
 
@@ -2660,7 +2708,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
             ssSetNumPWork(S, sz_arg+sz_res);
 
             int n_p = {prefix}get_id_count(m, "p");
-            if (!ssSetNumInputPorts(S, n_p+{3 if self.nz>0 else 2}+1)) return;
+            if (!ssSetNumInputPorts(S, n_p+{2+(self.nz>0)+(self.nv>0)}+1)) return;
             if (n_p<0) {{
               cleanup();
 #ifdef MATLAB_MEX_FILE
@@ -2698,14 +2746,24 @@ int {prefix}flag_value({prefix}struct* m, int index);
             ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
             ssSetInputPortRequiredContiguous(S, i, 1);
             i++;
+            """)
 
+      if self.nv>0:
+        out.write(f"""
+            {prefix}get_size(m, "v_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
+            ssSetInputPortDirectFeedThrough(S, i, 1);
+            ssSetInputPortMatrixDimensions(S, i, n_row, n_col);
+            ssSetInputPortRequiredContiguous(S, i, 1);
+            i++;""")
+
+      out.write(f"""
             // Port
             ssSetInputPortDirectFeedThrough(S, i, 1);
             ssSetInputPortMatrixDimensions(S, i, 1, 1);
             ssSetInputPortRequiredContiguous(S, i, 1);
             i++;
 
-            if (!ssSetNumOutputPorts(S, {(3 if self.nz>0 else 2) + (1 if ignore_errors else 0)+1})) return;
+            if (!ssSetNumOutputPorts(S, {(2+(self.nz>0)+(self.nv>0)) + (1 if ignore_errors else 0)+1})) return;
 
             i = 0;
             {prefix}get_size(m, "x_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
@@ -2721,6 +2779,12 @@ int {prefix}flag_value({prefix}struct* m, int index);
       out.write(f"""
             {prefix}get_size(m, "u_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
             ssSetOutputPortMatrixDimensions(S, i, n_row, {'1' if short_output else 'n_col'});
+            i++;""")
+
+      if self.nv>0:
+        out.write(f"""
+            {prefix}get_size(m, "v_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
+            ssSetOutputPortMatrixDimensions(S, i, n_row, n_col);
             i++;""")
 
       if ignore_errors:
@@ -2816,7 +2880,12 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
       out.write(f"""
             {prefix}set(m, "u_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetInputPortSignal(S,i++), IMPACT_FULL);
+            """)
+      if self.nv>0:
+        out.write(f"""
+            {prefix}set(m, "v_initial_guess", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetInputPortSignal(S,i++), IMPACT_FULL);""")
 
+      out.write(f"""
             const real_T* hotstart_ptr = ssGetInputPortSignal(S,i++);
             real_T hotstart = *hotstart_ptr;
 
@@ -2853,6 +2922,11 @@ int {prefix}flag_value({prefix}struct* m, int index);
             {prefix}get(m, "u_opt", IMPACT_ALL, {'0' if short_output else 'IMPACT_EVERYWHERE'}, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);
 
             """)
+      if self.nv>0:
+        out.write(f"""
+            {prefix}get(m, "v_opt", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);""")
+
+
       if ignore_errors:
         out.write(f"""ssGetOutputPortRealSignal(S, i++)[0] = ret;
         """)
@@ -3008,6 +3082,8 @@ plt.show()
     if self.nz>0:
       port_labels_in.append('z_initial_guess')
     port_labels_in.append('u_initial_guess')
+    if self.nv>0:
+      port_labels_in.append('v_initial_guess')
     port_labels_in.append('hotstart')
     mask_name = f"IMPACT MPC\\n{name}"
     port_labels_out = []
@@ -3015,6 +3091,8 @@ plt.show()
     if self.nz>0:
       port_labels_out.append("z_opt")
     port_labels_out.append("u_opt @ k=0" if short_output else "u_opt")
+    if self.nv>0:
+      port_labels_out.append("v_opt")
     if ignore_errors:
       port_labels_out.append("status code (0=good)")
     port_in = []
@@ -3025,7 +3103,8 @@ plt.show()
     if self.nz>0:
       port_in.append(f"NaN({len(self.algebraics)},{self._method.N+1})")
     port_in.append(f"NaN({self.nu},{self._method.N})")
-
+    if self.nv>0:
+      port_in.append(f"NaN({v_nominal.size},1)")
     port_in.append(f"0")
 
 
