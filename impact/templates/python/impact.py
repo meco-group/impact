@@ -47,6 +47,7 @@ class Impact:
         self._register("get_id_count",[m_type, c_char_p], c_int)
         self._register("get_size",[m_type, c_char_p, c_char_p, c_int, c_int, POINTER(c_int), POINTER(c_int)], c_int)
         self._register("solve",[m_type], c_int)
+        self._register("hotstart",[m_type], c_int)
         self._register("flag_size",[m_type], c_int)
         self._register("flag_name",[m_type, c_int], c_char_p)
         self._register("flag_value",[m_type, c_int], c_int)
@@ -100,6 +101,9 @@ class Impact:
 
     def solve(self):
         self._solve(self._m)
+
+    def hotstart(self):
+        self._hotstart(self._m)
 
     def __del__(self):
         if hasattr(self, "_m"):

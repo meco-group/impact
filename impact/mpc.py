@@ -1467,6 +1467,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
     variable_names = [v.name() for v in variables_symbols]
 
     hotstart_symbol = lam_g
+    hotstart_symbol = MX(0,1)
     
     ocpfun = self.to_function(casadi_fun_name,
       [states]+(["z"] if is_coll else [MX()])+[controls]+[vvcat(variables)]+parameters+[hotstart_symbol],
