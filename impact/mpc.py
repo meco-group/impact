@@ -554,6 +554,28 @@ class MPC(Ocp):
   def expr(self):
       return self._expr
 
+  def control(self,*args,**kwargs):
+    if len(args)>0 and isinstance(args[0],str):
+        name = args[0]
+        args = args[1:]
+    else:
+      name = "u%d" % self.nu
+    u = MX.sym(name,*args)
+    self.register_control(u,**kwargs)
+    self.expr._register('u', {name: u})
+    return u
+
+  def state(self,*args,**kwargs):
+    if len(args)>0 and isinstance(args[0],str):
+        name = args[0]
+        args = args[1:]
+    else:
+      name = "x%d" % self.nx
+    x = MX.sym(name,*args)
+    self.register_state(x,**kwargs)
+    self.expr._register('x', {name: x})
+    return x
+
   def parameter(self,*args,**kwargs):
     if len(args)>0 and isinstance(args[0],str):
         name = args[0]

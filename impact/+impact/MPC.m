@@ -21,6 +21,26 @@ classdef MPC < rockit.Ocp & rockit.Stage
         obj.parent = py.impact.MPC(args{:},pyargs(kwargs{:}));
       end
     end
+    function varargout = control(obj,varargin)
+      global pythoncasadiinterface
+      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,-inf,{'name','args','kwargs'});
+      if isempty(kwargs)
+        res = obj.parent.control(args{:});
+      else
+        res = obj.parent.control(args{:},pyargs(kwargs{:}));
+      end
+      varargout = pythoncasadiinterface.python2matlab_ret(res);
+    end
+    function varargout = state(obj,varargin)
+      global pythoncasadiinterface
+      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,-inf,{'name','args','kwargs'});
+      if isempty(kwargs)
+        res = obj.parent.state(args{:});
+      else
+        res = obj.parent.state(args{:},pyargs(kwargs{:}));
+      end
+      varargout = pythoncasadiinterface.python2matlab_ret(res);
+    end
     function varargout = parameter(obj,varargin)
       global pythoncasadiinterface
       [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,-inf,{'name','args','kwargs'});
