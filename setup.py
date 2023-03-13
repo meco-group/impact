@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 import glob
 import os
 
-version = "0.2.0"
+version = "0.2.1"
 
 print(find_packages(exclude=['tests', 'examples']))
 
@@ -16,7 +16,7 @@ setup(
     author_email="joris.gillis@kuleuven.be",
     description="DIRAC MPC",
     license='LICENSE',
-    url='https://gitlab.kuleuven.be/meco/projects/sbo_dirac/impact',
+    url='https://gitlab.kuleuven.be/meco-software/impact',
     packages=find_packages(exclude=['tests', 'examples']),
     include_package_data=True,
     long_description=open('README.md').read(),
@@ -27,5 +27,5 @@ setup(
         'lxml',
         'rockit-meco>=0.1.32',
     ],
-    download_url='https://gitlab.kuleuven.be/meco/projects/sbo_dirac/impact/-/archive/v%s/impact-v%s.tar.gz' % (version, version)
+    download_url='https://gitlab.kuleuven.be/meco-software/impact/-/archive/v%s/impact-v%s.tar.gz' % (version, version)
 )
