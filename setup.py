@@ -10,7 +10,7 @@ version = "0.2.0"
 print(find_packages(exclude=['tests', 'examples']))
 
 setup(
-    name='impact',
+    name='impact-meco',
     version=version,
     author="MECO-Group",
     author_email="joris.gillis@kuleuven.be",
