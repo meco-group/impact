@@ -4,10 +4,13 @@ stages:
 
 docs:
   stage: docs
-  image: alejandroastudillo/tasho-base
+  image: alejandroastudillo/impact-base
   before_script:
-    - pip install --upgrade docutils
-    - pip install --upgrade sphinx-rtd-theme
+    - source activate impact-base
+    # - rm -rf .pip
+    # - rm -rfv /tmp/*
+    # - pip install --upgrade docutils
+    # - pip install --upgrade sphinx-rtd-theme
     # - pip install --upgrade rockit-meco
     # - pip install pyyaml
     # - pip install lxml
