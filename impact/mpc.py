@@ -1,3 +1,5 @@
+"""MPC class of Impact."""
+
 from re import X
 from rockit import Ocp, rockit_pickle_context, rockit_unpickle_context
 from casadi import Function, MX, vcat, vvcat, veccat, GlobalOptions, vec, CodeGenerator
@@ -166,6 +168,8 @@ class Structure:
 
 
 class Model(DotDict):
+  """This should be a description of the Model class."""
+  
   def __init__(self, prefix=""):
     DotDict.__init__(self)
     self._prefix = prefix
@@ -544,7 +548,19 @@ class Mask:
 
 
 class MPC(Ocp):
+    """This should be a description of the MPC class.
+    It's common for programmers to give a code example inside of their
+    docstring::
+
+        from impact import MPC
+        mpc = MPC(T=2.0)
+
+    Here is a link to :py:meth:`__init__`.
+    """
+
   def __init__(self, **kwargs):
+    """Inits MPC class."""
+
     Ocp.__init__(self, **kwargs)
     self._expr = Model()
     self.basename = os.path.dirname(__file__)
@@ -555,6 +571,8 @@ class MPC(Ocp):
       return self._expr
 
   def control(self,*args,**kwargs):
+    """Defines control variable"""
+
     if len(args)>0 and isinstance(args[0],str):
         name = args[0]
         args = args[1:]
@@ -1137,6 +1155,19 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
     return F
 
   def add_model(self,name,file_name):
+    """Creates a model based on a yaml file
+
+        :param name: Name of the model
+        :type name: string
+
+        :param file_name: Path to the yaml file
+        :type name: string
+
+        :return: model
+        :rtype: Model
+
+    """
+
     # Read meta information
     with open(file_name) as file:
         model_meta = yaml.load(file, Loader=yaml.FullLoader)

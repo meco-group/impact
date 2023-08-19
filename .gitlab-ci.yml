@@ -9,7 +9,9 @@ docs:
     - pip install --upgrade docutils
     - pip install --upgrade sphinx-rtd-theme
   script:
-    - cd docs && make html
+    - cd docs && mkdir -p apidoc
+    - sphinx-apidoc -f -o ./apidoc/ ../impact/
+    - make html
   artifacts:
     paths:
       - docs/build

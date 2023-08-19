@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.abspath('../..'))
 # -- Project information -----------------------------------------------------
 
 project = 'impact'
-copyright = '2021 - 2023, Joris Gillis, Alvaro Florez, Alejandro Astudillo'
+copyright = '2021 - 2023, MECO Research Team, KU Leuven'
 author = 'MECO Research Team, KU Leuven'
 
 # The full version, including alpha/beta/rc tags
