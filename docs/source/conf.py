@@ -76,7 +76,7 @@ html_theme_options = {
     'titles_only': False
 }
 
-# html_logo = "../aux/img/logo/tasho_full.svg"
+html_logo = "../figures/logo/impact_logo.svg"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
