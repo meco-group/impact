@@ -8,9 +8,9 @@ docs:
   before_script:
     - pip install --upgrade docutils
     - pip install --upgrade sphinx-rtd-theme
-    - pip install --upgrade rockit-meco
-    - pip install pyyaml
-    - pip install lxml
+    # - pip install --upgrade rockit-meco
+    # - pip install pyyaml
+    # - pip install lxml
   script:
     - cd docs && mkdir -p apidoc
     - sphinx-apidoc -f -o ./apidoc/ ../impact/
