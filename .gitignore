@@ -2,6 +2,7 @@
 __pycache__/
 impact.egg-info/
 docs/build/
+docs/apidoc/
 c_generated_code/
 build/
 dist/

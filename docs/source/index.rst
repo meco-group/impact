@@ -20,6 +20,7 @@ Table of contents
 
 .. toctree::
   :caption: Class reference
+  :maxdepth: 2
 
   class_ref/classes
 
