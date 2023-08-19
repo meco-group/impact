@@ -1,5 +1,4 @@
 """MPC class of Impact."""
-
 from re import X
 from rockit import Ocp, rockit_pickle_context, rockit_unpickle_context
 from casadi import Function, MX, vcat, vvcat, veccat, GlobalOptions, vec, CodeGenerator
@@ -169,7 +168,7 @@ class Structure:
 
 class Model(DotDict):
   """This should be a description of the Model class."""
-  
+
   def __init__(self, prefix=""):
     DotDict.__init__(self)
     self._prefix = prefix
@@ -548,15 +547,15 @@ class Mask:
 
 
 class MPC(Ocp):
-    """This should be a description of the MPC class.
-    It's common for programmers to give a code example inside of their
-    docstring::
+  """This should be a description of the MPC class.
+  It's common for programmers to give a code example inside of their
+  docstring::
 
-        from impact import MPC
-        mpc = MPC(T=2.0)
+      from impact import MPC
+      mpc = MPC(T=2.0)
 
-    Here is a link to :py:meth:`__init__`.
-    """
+  Here is a link to :py:meth:`__init__`.
+  """
 
   def __init__(self, **kwargs):
     """Inits MPC class."""
@@ -621,12 +620,12 @@ class MPC(Ocp):
 
   def add_simulink_fmu(self,name,verbose=True):
     """
-    Not supported: 
-     * time dependence
-     * delays
-    Perhpas SS is better
-    Caveats:
-     * scaling for finite diff
+      Not supported: 
+      * time dependence
+      * delays
+      Perhpas SS is better
+      Caveats:
+      * scaling for finite diff
     """
     from pathlib import Path
     import zipfile

@@ -1,8 +1,9 @@
 
-Welcome to IMPACT’s documentation!
-=================================
+Welcome to Impact's documentation!
+==================================
+|build-status| |license|
 
-**IMPACT**: A Toolchain for Nonlinear Model Predictive Control Specification, Prototyping, and Deployment
+**Impact**: A Toolchain for Nonlinear Model Predictive Control Specification, Prototyping, and Deployment
 
 =============================================================================================
 
