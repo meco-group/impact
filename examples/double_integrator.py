@@ -1,3 +1,9 @@
+"""
+Double integrator
+=================
+
+Basic double integrator example using GRAMPC
+"""
 from impact import *
 import casadi as cs
 

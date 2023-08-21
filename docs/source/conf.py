@@ -38,7 +38,9 @@ extensions = [
 'sphinx.ext.intersphinx',
 'sphinx.ext.viewcode',
 'sphinx.ext.todo',
-'sphinx_gallery.gen_gallery'
+'sphinx.ext.mathjax',
+'sphinx_gallery.gen_gallery',
+'sphinx_inline_tabs',
 ]
 
 todo_include_todos = True
@@ -65,6 +67,7 @@ sphinx_gallery_conf = {
     'filename_pattern': '/cart_pendulum.py',
     'ignore_pattern': '/cart_pendulum_|/double_integrator|/generate_models',
     # 'within_subsection_order': ExampleTitleSortKey,
+    # 'plot_gallery': 'False',
     # 'binder': {
     #   'org': 'meco-software',
     #   'repo': 'rockit.git', # URL will be fixed in .gitlab-ci.yml

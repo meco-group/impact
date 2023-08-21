@@ -26,9 +26,13 @@ Table of contents
   :caption: Getting started
   :maxdepth: 1
 
-  tutorial/problem_formulation
-  tutorial/model
-  tutorial/artifacts
+  tutorial/getting_started
+
+.. toctree::
+  :caption: Generated artifacts
+  :maxdepth: 1
+
+  artifacts/artifacts
 
 .. toctree::
   :caption: Examples
@@ -37,7 +41,7 @@ Table of contents
   examples/index
 
 .. toctree::
-  :caption: API reference
+  :caption: API reference - Python
   :maxdepth: 2
 
   api_reference/classes

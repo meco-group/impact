@@ -1,3 +1,9 @@
+"""
+Cart-pendulum features
+======================
+
+Basic cart-pendulum example
+"""
 from impact import *
 
 from rockit import *

@@ -1,2 +1,2 @@
-Gallery of Impact examples
-==========================
+Gallery of examples
+===================
