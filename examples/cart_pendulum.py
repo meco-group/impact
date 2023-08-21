@@ -1,3 +1,9 @@
+"""
+Cart-pendulum
+=============
+
+Basic cart-pendulum example using YAML model
+"""
 from impact import *
 
 mpc = MPC(T=2.0)
@@ -34,6 +40,6 @@ mpc.set_value(weights, [1,1])
 # Make it concrete for this ocp
 mpc.method(MultipleShooting(N=50,M=1,intg='rk'))
 
-mpc.save("cart_pendulum.impact")
+# mpc.save("cart_pendulum.impact")
 
-mpc.export("cart_pendulum",qp_error_on_fail=False)
+# mpc.export("cart_pendulum",qp_error_on_fail=False)

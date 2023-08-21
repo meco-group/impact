@@ -1,10 +1,10 @@
 # Impact: A Toolchain for Nonlinear Model Predictive Control Specification, Prototyping, and Deployment
 
-
 <div align="center">
 
 [![pipeline status](https://gitlab.kuleuven.be/meco-software/impact/badges/main/pipeline.svg)](https://gitlab.mech.kuleuven.be/meco-software/impact/commits/main)
 [![license: LGPL v3](https://img.shields.io/badge/license-LGPL%20v3-success.svg)](https://opensource.org/licenses/LGPL-3.0)
+[![pypi version](https://badge.fury.io/py/impact-meco.svg)](https://pypi.org/project/impact-meco/)
 [![html docs](https://img.shields.io/static/v1.svg?label=docs&message=online&color=informational)](https://meco-software.pages.gitlab.kuleuven.be/impact/)
 
 </div>
