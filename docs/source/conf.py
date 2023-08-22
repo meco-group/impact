@@ -37,7 +37,10 @@ extensions = [
 'sphinx.ext.coverage',
 'sphinx.ext.intersphinx',
 'sphinx.ext.viewcode',
-'sphinx.ext.todo'
+'sphinx.ext.todo',
+'sphinx.ext.mathjax',
+'sphinx_gallery.gen_gallery',
+'sphinx_inline_tabs',
 ]
 
 todo_include_todos = True
@@ -54,6 +57,26 @@ autodoc_default_options = {
     'special-members': '__init__',
     'exclude-members': '__weakref__'
 }
+
+# from sphinx_gallery.sorting import ExampleTitleSortKey
+
+sphinx_gallery_conf = {
+    'examples_dirs': '../../examples',   # path to your example scripts
+    'gallery_dirs': 'examples',  # path where to save gallery generated examples
+    # 'filename_pattern': '/',
+    'filename_pattern': '/cart_pendulum.py',
+    'ignore_pattern': '/cart_pendulum_|/double_integrator|/generate_models',
+    # 'within_subsection_order': ExampleTitleSortKey,
+    # 'plot_gallery': 'False',
+    # 'binder': {
+    #   'org': 'meco-software',
+    #   'repo': 'rockit.git', # URL will be fixed in .gitlab-ci.yml
+    #   'branch': 'master',
+    #   'binderhub_url': 'https://mybinder.org',
+    #   'dependencies': ['../../.binder/requirements.txt'],
+    # }
+}
+
 
 
 # -- Options for HTML output -------------------------------------------------

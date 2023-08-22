@@ -5,7 +5,7 @@ classdef Model < impact.DotDict
     function obj = Model(varargin)
       obj@impact.DotDict('from_super');
       if length(varargin)==1 && ischar(varargin{1}) && strcmp(varargin{1},'from_super'),return,end
-      if length(varargin)==1 && isa(varargin{1},'py.impact.mpc.Model')
+      if length(varargin)==1 && isa(varargin{1},'py.impact.model.Model')
         obj.parent = varargin{1};
         return
       end

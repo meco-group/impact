@@ -14,6 +14,9 @@ from contextlib import redirect_stdout, redirect_stderr
 import io
 import numpy as np
 
+from .dotdict import DotDict, Structure
+from .model import Model
+
 class Field:
   def __init__(self,name,type):
     self.name = name
@@ -84,112 +87,112 @@ dae_keys = {"x": "differential_states", "z": "algebraic_states", "p": "parameter
 dae_rockit = {"x": "state", "z": "algebraic", "p": "parameter", "u": "control"}
 
 
-keywords = {"x","u","z","p","c","y"}
-for k in set(keywords):
-  keywords.add("n"+k)
-keywords.add("all")
+# keywords = {"x","u","z","p","c","y"}
+# for k in set(keywords):
+#   keywords.add("n"+k)
+# keywords.add("all")
 
 
-def remove_prefix(n,prefix):
-  if n.startswith(prefix):
-    return n[len(prefix):]
-  else:
-    n
+# def remove_prefix(n,prefix):
+#   if n.startswith(prefix):
+#     return n[len(prefix):]
+#   else:
+#     n
 
-class DotDict(object):
-  """like a dict but access through . """
-  def __init__(self, d=None):
-    if d is None:
-      d = {}
-    self._d = d
+# class DotDict(object):
+#   """like a dict but access through . """
+#   def __init__(self, d=None):
+#     if d is None:
+#       d = {}
+#     self._d = d
 
-  def __getattr__(self, k):
-    try:
-      return self._d[k]
-    except:
-      raise AttributeError()
+#   def __getattr__(self, k):
+#     try:
+#       return self._d[k]
+#     except:
+#       raise AttributeError()
   
-  def _update(self, d, allow_keyword=False):
-    for k,v in d.items():
-      if allow_keyword:
-        if k in self._d:
-          old = self._d[k]
-          if isinstance(old,list):
-            self._d[k]=old+v
-          else:
-            self._d[k] = veccat(old,v)
-        else:
-          self._d[k] = v
-      else:
-        if k in keywords:
-          raise Exception("'%s' is a reserved keyword. Please use another name." % k)
-        if k in self._d:
-          raise Exception("Name collision: '%s' already in use." % k)
-        self._d[k] = v
+#   def _update(self, d, allow_keyword=False):
+#     for k,v in d.items():
+#       if allow_keyword:
+#         if k in self._d:
+#           old = self._d[k]
+#           if isinstance(old,list):
+#             self._d[k]=old+v
+#           else:
+#             self._d[k] = veccat(old,v)
+#         else:
+#           self._d[k] = v
+#       else:
+#         if k in keywords:
+#           raise Exception("'%s' is a reserved keyword. Please use another name." % k)
+#         if k in self._d:
+#           raise Exception("Name collision: '%s' already in use." % k)
+#         self._d[k] = v
       
-  def __repr__(self,indent=0):
-    s = "{\n"
-    for k,v in sorted(self._d.items()):
-      s += ("  " * (indent+1)) + k
-      try:
-        s += ": " + v.__repr__(indent=indent+1)
-      except:
-        if isinstance(v, list):
-          s+= ": " + str(v)
-        #s += str(v)
-        pass
+#   def __repr__(self,indent=0):
+#     s = "{\n"
+#     for k,v in sorted(self._d.items()):
+#       s += ("  " * (indent+1)) + k
+#       try:
+#         s += ": " + v.__repr__(indent=indent+1)
+#       except:
+#         if isinstance(v, list):
+#           s+= ": " + str(v)
+#         #s += str(v)
+#         pass
 
-      s += "\n"
-    s+=("  " * indent) + "}"
-    return s
-
-
-class Structure:
-  def __init__(self, definition,prefix=""):
-    if isinstance(definition,MX):
-      self._symbols = [definition]
-      self._concat = definition
-      self._numel = definition
-      self._names = [definition.name()]
-    else:
-      symbols = []
-      for d in definition:
-        size = d["size"] if "size" in d else 1
-        name = d["name"]
-        symbols.append(MX.sym(prefix+name, size))
-      self._names = [d["name"] for d in definition]
-      self._symbols = symbols
-      self._concat = vcat(symbols)
-      self._numel = self._concat.numel()
-
-  def __MX__(self):
-    return self._concat
+#       s += "\n"
+#     s+=("  " * indent) + "}"
+#     return s
 
 
-class Model(DotDict):
-  """This should be a description of the Model class."""
+# class Structure:
+#   def __init__(self, definition,prefix=""):
+#     if isinstance(definition,MX):
+#       self._symbols = [definition]
+#       self._concat = definition
+#       self._numel = definition
+#       self._names = [definition.name()]
+#     else:
+#       symbols = []
+#       for d in definition:
+#         size = d["size"] if "size" in d else 1
+#         name = d["name"]
+#         symbols.append(MX.sym(prefix+name, size))
+#       self._names = [d["name"] for d in definition]
+#       self._symbols = symbols
+#       self._concat = vcat(symbols)
+#       self._numel = self._concat.numel()
 
-  def __init__(self, prefix=""):
-    DotDict.__init__(self)
-    self._prefix = prefix
-    self.all = DotDict()
+#   def __MX__(self):
+#     return self._concat
 
-  def _register(self,key,parts):
-    if isinstance(parts,dict):
-      for k,v in parts.items():
-        self._update({k: v})
-      ks = list(sorted(parts.keys()))
-      self.all._update({key: [parts[k] for k in ks]},allow_keyword=True)
-      self._update({key: vvcat([parts[k] for k in ks])},allow_keyword=True)
-    else:
-      s = Structure(parts,prefix=self._prefix)
-      for e in s._symbols:
-        self._update({remove_prefix(e.name(),self._prefix): e},allow_keyword=isinstance(parts,MX))
-      self.all._update({key: s._symbols},allow_keyword=True)
-      if not isinstance(parts,MX):
-        self._update({key : s._concat},allow_keyword=True)
-      self._update({'n'+key: s._numel},allow_keyword=True)
-      return s
+
+# class Model(DotDict):
+#   """This should be a description of the Model class."""
+
+#   def __init__(self, prefix=""):
+#     DotDict.__init__(self)
+#     self._prefix = prefix
+#     self.all = DotDict()
+
+#   def _register(self,key,parts):
+#     if isinstance(parts,dict):
+#       for k,v in parts.items():
+#         self._update({k: v})
+#       ks = list(sorted(parts.keys()))
+#       self.all._update({key: [parts[k] for k in ks]},allow_keyword=True)
+#       self._update({key: vvcat([parts[k] for k in ks])},allow_keyword=True)
+#     else:
+#       s = Structure(parts,prefix=self._prefix)
+#       for e in s._symbols:
+#         self._update({remove_prefix(e.name(),self._prefix): e},allow_keyword=isinstance(parts,MX))
+#       self.all._update({key: s._symbols},allow_keyword=True)
+#       if not isinstance(parts,MX):
+#         self._update({key : s._concat},allow_keyword=True)
+#       self._update({'n'+key: s._numel},allow_keyword=True)
+#       return s
 
 def fun2s_function(fun, name=None, dir=".",ignore_errors=False,build_dir_abs=None):
     fun_name = fun.name()

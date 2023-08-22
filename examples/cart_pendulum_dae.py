@@ -1,3 +1,9 @@
+"""
+Cart-pendulum DAE
+=================
+
+Basic cart-pendulum example using differential algebraic equations
+"""
 from impact import *
 
 mpc = MPC()

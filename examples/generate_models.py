@@ -1,3 +1,9 @@
+"""
+Generate models
+===============
+
+Basic example to generate models as CasADi functions
+"""
 from casadi import *
 
 pos = MX.sym("pos")
