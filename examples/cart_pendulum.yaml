@@ -1,0 +1,22 @@
+equations:
+  inline:
+    ode:
+      pos: dpos
+      theta: dtheta
+      dpos: (-m*L*sin(theta)*dtheta*dtheta + m*g*cos(theta)*sin(theta)+F)/(mcart + m - m*cos(theta)*cos(theta))
+      dtheta: (-m*L*cos(theta)*sin(theta)*dtheta*dtheta + F*cos(theta)+(mcart+m)*g*sin(theta))/(L*(mcart + m - m*cos(theta)*cos(theta)))
+differential_states: 
+  - name: pos
+  - name: theta
+  - name: dpos
+  - name: dtheta
+controls: 
+  - name: F
+constants:
+  inline:
+    mcart: 0.5   # cart mass [kg]
+    m:     1     # pendulum mass [kg]
+    L:     2     # pendulum length [m]
+    g:     9.81  # gravitation [m/s^2]
+
+

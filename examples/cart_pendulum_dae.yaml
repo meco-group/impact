@@ -1,0 +1,35 @@
+equations:
+  inline:
+    ode:
+      X: dx
+      Y: dy
+      w: dw
+      dx: ddx
+      dy: ddy
+      dw: ddw
+    alg:
+      - (X-w)*(ddx - ddw) + Y*ddy + dy*dy + (dx-dw)**2
+differential_states: 
+  - name: X
+  - name: Y
+  - name: w
+  - name: dx
+  - name: dy
+  - name: dw
+algebraic_states:
+  - name: xa
+controls: 
+  - name: U
+outputs:
+  inline:
+    ddx: (w-X)*xa/m
+    ddy: g-Y*xa/m
+    ddw: ((X-w)*xa - U)/M
+constants:
+  inline:
+    M:     1     #  mass [kg]
+    m:     1     #  mass [kg]
+    L:     1     # pendulum length [m]
+    g:     9.81  # gravitation [m/s^2]
+
+

@@ -1,0 +1,11 @@
+equations:
+  external:
+    type: casadi_serialized
+    file_name: cart_pendulum_equations.casadi
+differential_states: 
+  - name: pos
+  - name: theta
+  - name: dpos
+  - name: dtheta
+controls: 
+  - name: F
