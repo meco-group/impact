@@ -586,7 +586,10 @@ class MPC(Ocp):
         name = args[0]
         args = args[1:]
     else:
-      name = "x%d" % self.nx
+      if "quad" in kwargs and kwargs["quad"]:
+        name = "xq%d" % self.nxq
+      else:
+        name = "x%d" % self.nx
     x = MX.sym(name,*args)
     self.register_state(x,**kwargs)
     self.expr._register('x', {name: x})
