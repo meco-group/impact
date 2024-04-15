@@ -13,6 +13,7 @@ from contextlib import redirect_stdout, redirect_stderr
 import io
 import numpy as np
 import copy
+from packaging import version
 
 class Field:
   def __init__(self,name,type):
@@ -1350,7 +1351,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
           qp = False
 
         if qp_error_on_fail:
-          if "d.dlam+" in line and "res" in line:
+          if ("d.dlam+" in line or "d->dlam+" in line) and "res" in line:
             line = line + "int flag="
 
           if "Detecting indefiniteness" in line:
@@ -1398,7 +1399,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
           # line = "clock_t start_t, end_t;\nstart_t=clock();\n" + line
 
         struct_strings = ["struct casadi_sqpmethod_prob p;",
-                          "struct casadi_feasiblesqpmethod_prob p;"]
+                          "struct casadi_feasiblesqpmethod_prob p;","struct casadi_ipopt_prob p;"]
 
         if any(s in line for s in struct_strings):
           line = "clock_t start_t, end_t;\nstart_t=clock();\n" + line
@@ -1583,11 +1584,15 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
         ['grid'])
     self.add_function(gridfun)
 
+    costfun_options = {}
+    if version.parse(casadi.__version__)>=version.parse("3.6.0"):
+      costfun_options["allow_free"] = True
+
     costfun = Function("cost_"+name,
       [states]+[controls]+parameters,
       [self._method.opti.f],
       ['x','u'] + parameter_names,
-      ['f']
+      ['f'],costfun_options
     )
     if costfun.has_free():
       print("Cost function has stray dependencies")
@@ -3022,9 +3027,13 @@ int {prefix}flag_value({prefix}struct* m, int index);
         if ".c" in e.name:
           out.write(f"""           files = [files {{[build_dir filesep '{os.path.basename(e.name)}']}}];\n""")
       if use_codegen:
+
+        ipopt = ''
+        if version.parse(casadi.__version__)>=version.parse("3.6.5"):
+          ipopt = "'-lipopt'"
         out.write(f"""
           files=[files {{ [build_dir filesep casadi_codegen_file_name_base]}}];
-          flags=[flags {{['-I' casadi.GlobalOptions.getCasadiIncludePath()] ['-I' casadi.GlobalOptions.getCasadiPath()] '-losqp'}}];
+          flags=[flags {{['-I' casadi.GlobalOptions.getCasadiIncludePath()] ['-I' casadi.GlobalOptions.getCasadiPath()] '-losqp' {ipopt}}}];
           """)
       else:
         out.write(f"""
@@ -3169,7 +3178,9 @@ plt.show()
       if use_codegen:
         lib_codegen_file_name = os.path.join(build_dir_abs,"lib" + name + "_codegen.so")
         lib_codegen_compile_commands = ["gcc","-g","-fPIC","-shared"]+source_files+ ["-lm","-o"+lib_codegen_file_name]+deps
-        deps += ["-l"+name+"_codegen","-losqp"] 
+        deps += ["-l"+name+"_codegen","-losqp"]
+        if version.parse(casadi.__version__)>=version.parse("3.6.5"):
+          deps += ["-lipopt"]
       else:
         deps += ["-lcasadi"]
       lib_compile_commands = ["gcc","-g","-fPIC","-shared",c_file_name,"-o"+lib_file_name]+deps+flags
