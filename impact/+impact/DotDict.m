@@ -6,7 +6,7 @@ classdef DotDict < handle
   methods
     function obj = DotDict(varargin)
       if length(varargin)==1 && ischar(varargin{1}) && strcmp(varargin{1},'from_super'),return,end
-      if length(varargin)==1 && isa(varargin{1},'py.impact.mpc.DotDict')
+      if length(varargin)==1 && isa(varargin{1},'py.impact.dotdict.DotDict')
         obj.parent = varargin{1};
         return
       end

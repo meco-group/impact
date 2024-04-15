@@ -1,0 +1,19 @@
+# Directories
+__pycache__/
+impact.egg-info/
+docs/build/
+docs/apidoc/
+docs/source/examples
+c_generated_code/
+build/
+dist/
+examples/*_build_dir/
+
+# Generated objects
+examples/*.impact
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Editor settings
+.vscode/

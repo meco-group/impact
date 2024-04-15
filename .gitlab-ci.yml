@@ -1,0 +1,40 @@
+stages:
+  - docs
+  - publish
+
+docs:
+  stage: docs
+  image: alejandroastudillo/impact-base
+  before_script:
+    - source activate impact-base
+    # - rm -rf .pip
+    # - rm -rfv /tmp/*
+    # - pip install --upgrade docutils
+    # - pip install --upgrade sphinx-rtd-theme
+    # - pip install --upgrade rockit-meco
+    # - pip install pyyaml
+    # - pip install lxml
+  script:
+    - cd docs && mkdir -p apidoc
+    - sphinx-apidoc -f -o ./apidoc/ ../impact/
+    - make html
+  artifacts:
+    paths:
+      - docs/build
+  only:
+    - main
+
+pages:
+  stage: publish
+  tags:
+    - pages
+  dependencies:
+    - docs
+  script:
+    - mkdir public
+    - cp -R ./docs/build/html/* ./public/
+  artifacts:
+    paths:
+      - public
+  only:
+    - main
