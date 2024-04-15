@@ -12,6 +12,7 @@ from lxml import etree
 from contextlib import redirect_stdout, redirect_stderr
 import io
 import numpy as np
+import copy
 
 class Field:
   def __init__(self,name,type):
@@ -107,7 +108,15 @@ class DotDict(object):
       return self._d[k]
     except:
       raise AttributeError()
-  
+
+  def __deepcopy__(self, memo):
+    if id(self) in memo:
+        return memo[id(self)]
+    ret = self.__class__(copy.deepcopy(self._d))
+    
+    memo[id(self)] = ret
+    return ret
+
   def _update(self, d, allow_keyword=False):
     for k,v in d.items():
       if allow_keyword:
@@ -188,6 +197,12 @@ class Model(DotDict):
       self._update({'n'+key: s._numel},allow_keyword=True)
       return s
 
+  def __deepcopy__(self, memo):
+      clone = super().__deepcopy__(memo)
+      clone._prefix = self._prefix
+      clone.all = copy.deepcopy(self.all)
+      return clone
+  
 def fun2s_function(fun, name=None, dir=".",ignore_errors=False,build_dir_abs=None):
     fun_name = fun.name()
     if name is None:
