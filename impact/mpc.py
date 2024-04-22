@@ -1356,7 +1356,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
         if m:
           increfs.append(m.group(0))
 
-        if "ocpfun_checkout" in line:
+        if "ocpfun_checkout" in line and version.parse(casadi.__version__)<version.parse("3.6.5"):
           fout.write(line)
           line = " ".join([e+"();" for e in increfs])
           
