@@ -16,7 +16,7 @@ x_final = mpc.parameter('x_final',cart_pendulum.nx)
 weights = mpc.parameter('weights',2)
 
 ## Objectives
-mpc.add_objective(mpc.integral(weights[0]*cart_pendulum.F**2 + weights[1]*100*cart_pendulum.pos**2))
+mpc.add_objective(mpc.sum(weights[0]*cart_pendulum.F**2 + weights[1]*100*cart_pendulum.pos**2))
 
 ## Boundary constraints
 mpc.subject_to(mpc.at_t0(cart_pendulum.x)==x_current)
@@ -39,6 +39,8 @@ mpc.set_value(weights, [1,1])
 
 ## Make it concrete for this ocp
 mpc.method(MultipleShooting(N=50,M=1,intg='rk'))
+
+#mpc.method(external_method('fatrop',N=50,mode='interface'))
 
 ## Save the MPC object
 # mpc.save("cart_pendulum.impact")
