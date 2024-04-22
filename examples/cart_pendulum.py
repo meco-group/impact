@@ -40,7 +40,7 @@ mpc.set_value(weights, [1,1])
 ## Make it concrete for this ocp
 mpc.method(MultipleShooting(N=50,M=1,intg='rk'))
 
-#mpc.method(external_method('fatrop',N=50,mode='interface'))
+#mpc.method(external_method('fatrop',N=50,mode='interface',fatrop_options={"tol":1e-5}))
 
 ## Save the MPC object
 # mpc.save("cart_pendulum.impact")

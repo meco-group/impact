@@ -3208,6 +3208,7 @@ plt.show()
         fatrop_driver = os.path.join(os.path.abspath(src_dir),"foobar","lib","libfatrop_driver.so")
         if os.path.exists(fatrop_driver):
           shutil.copy(fatrop_driver, build_dir_abs)
+          shutil.copy(os.path.join(os.path.abspath(src_dir),"foobar","lib","libfatrop.so"), build_dir_abs)
           deps += ["-lfatrop_driver"]
 
       else:
