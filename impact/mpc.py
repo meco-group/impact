@@ -3205,6 +3205,11 @@ plt.show()
         deps += ["-l"+name+"_codegen","-losqp"]
         if version.parse(casadi.__version__)>=version.parse("3.6.5"):
           deps += ["-lipopt"]
+        fatrop_driver = os.path.join(os.path.abspath(src_dir),"foobar","lib","libfatrop_driver.so")
+        if os.path.exists(fatrop_driver):
+          shutil.copy(fatrop_driver, build_dir_abs)
+          deps += ["-lfatrop_driver"]
+
       else:
         deps += ["-lcasadi"]
       lib_compile_commands = ["gcc","-g","-fPIC","-shared",c_file_name,"-o"+lib_file_name]+deps+flags
