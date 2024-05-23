@@ -29,6 +29,11 @@ class Struct:
     self.name = name
     self.fields = fields
 
+def modern_casadi():
+  if "-" in casadi.__version__:
+    return True
+  return version.parse(casadi.__version__)>=version.parse("3.6.5")
+
 
 fields = [Field("sqp_stop_crit","int"),
           Field("n_sqp_iter","int"),
@@ -1358,7 +1363,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
         if m:
           increfs.append(m.group(0))
 
-        if "ocpfun_checkout" in line and version.parse(casadi.__version__)<version.parse("3.6.5"):
+        if "ocpfun_checkout" in line and modern_casadi():
           fout.write(line)
           line = " ".join([e+"();" for e in increfs])
           
@@ -1423,7 +1428,10 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
           # line = "clock_t start_t, end_t;\nstart_t=clock();\n" + line
 
         struct_strings = ["struct casadi_sqpmethod_prob p;",
-                          "struct casadi_feasiblesqpmethod_prob p;","struct casadi_ipopt_prob p;"]
+                          "struct casadi_feasiblesqpmethod_prob p;",
+                          "struct casadi_ipopt_prob p;",
+                          "casadi_fatrop_prob p;"
+                          ]
 
         if any(s in line for s in struct_strings):
           line = "clock_t start_t, end_t;\nstart_t=clock();\n" + line
@@ -1611,7 +1619,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
     self.add_function(gridfun)
 
     costfun_options = {}
-    if version.parse(casadi.__version__)>=version.parse("3.6.0"):
+    if modern_casadi():
       costfun_options["allow_free"] = True
 
     costfun = Function("cost_"+name,
@@ -3055,8 +3063,8 @@ int {prefix}flag_value({prefix}struct* m, int index);
       if use_codegen:
 
         ipopt = ''
-        if version.parse(casadi.__version__)>=version.parse("3.6.5"):
-          ipopt = "'-lipopt'"
+        if modern_casadi():
+          ipopt = "'-lipopt' '-lfatrop'"
         out.write(f"""
           files=[files {{ [build_dir filesep casadi_codegen_file_name_base]}}];
           flags=[flags {{['-I' casadi.GlobalOptions.getCasadiIncludePath()] ['-I' casadi.GlobalOptions.getCasadiPath()] '-losqp' {ipopt}}}];
@@ -3205,8 +3213,9 @@ plt.show()
         lib_codegen_file_name = os.path.join(build_dir_abs,"lib" + name + "_codegen.so")
         lib_codegen_compile_commands = ["gcc","-g","-fPIC","-shared"]+source_files+ ["-lm","-o"+lib_codegen_file_name]+deps
         deps += ["-l"+name+"_codegen","-losqp"]
-        if version.parse(casadi.__version__)>=version.parse("3.6.5"):
-          deps += ["-lipopt"]
+
+        if modern_casadi():
+          deps += ["-lipopt","-lfatrop"]
         fatrop_driver = os.path.join(os.path.abspath(src_dir),"foobar","lib","libfatrop_driver.so")
         if os.path.exists(fatrop_driver):
           shutil.copy(fatrop_driver, build_dir_abs)
