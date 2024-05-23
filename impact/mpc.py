@@ -1490,7 +1490,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
     return self._method.opti.p
 
 
-  def export(self,name,src_dir=".",use_codegen=None,context=None,ignore_errors=False,short_output=True,qp_error_on_fail=True):
+  def export(self,name,src_dir=".",use_codegen=None,context=None,ignore_errors=False,short_output=True,qp_error_on_fail=True,c_flags=["-O3"]):
     build_dir_rel = name+"_build_dir"
     build_dir_abs = os.path.join(os.path.abspath(src_dir),build_dir_rel)
 
@@ -3211,7 +3211,7 @@ plt.show()
       deps = ["-I"+build_dir_abs,"-L"+build_dir_abs,"-Wl,-rpath="+build_dir_abs,"-L"+GlobalOptions.getCasadiPath(),"-I"+GlobalOptions.getCasadiIncludePath(),"-Wl,-rpath="+GlobalOptions.getCasadiPath()]
       if use_codegen:
         lib_codegen_file_name = os.path.join(build_dir_abs,"lib" + name + "_codegen.so")
-        lib_codegen_compile_commands = ["gcc","-g","-fPIC","-shared"]+source_files+ ["-lm","-o"+lib_codegen_file_name]+deps
+        lib_codegen_compile_commands = ["gcc"]+c_flags+["-fPIC","-shared"]+source_files+ ["-lm","-o"+lib_codegen_file_name]+deps
         deps += ["-l"+name+"_codegen","-losqp"]
 
         if modern_casadi():
@@ -3224,9 +3224,9 @@ plt.show()
 
       else:
         deps += ["-lcasadi"]
-      lib_compile_commands = ["gcc","-g","-fPIC","-shared",c_file_name,"-o"+lib_file_name]+deps+flags
+      lib_compile_commands = ["gcc"]+c_flags+["-fPIC","-shared",c_file_name,"-o"+lib_file_name]+deps+flags
 
-      hello_compile_commands = ["gcc","-g",hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-o",hello_file_name]+deps+flags
+      hello_compile_commands = ["gcc"]+c_flags+[hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-o",hello_file_name]+deps+flags
 
       if os.name!="nt":
         print("Compiling")
