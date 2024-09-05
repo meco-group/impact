@@ -3064,7 +3064,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
         ipopt = ''
         if modern_casadi():
-          ipopt = "'-lipopt' '-lfatrop'"
+          ipopt = "'-lipopt' '-lfatrop' '-lblasfeo'"
         out.write(f"""
           files=[files {{ [build_dir filesep casadi_codegen_file_name_base]}}];
           flags=[flags {{['-I' casadi.GlobalOptions.getCasadiIncludePath()] ['-I' casadi.GlobalOptions.getCasadiPath()] '-losqp' {ipopt}}}];
@@ -3215,7 +3215,7 @@ plt.show()
         deps += ["-l"+name+"_codegen","-losqp"]
 
         if modern_casadi():
-          deps += ["-lipopt","-lfatrop"]
+          deps += ["-lipopt","-lfatrop","-lblasfeo"]
         fatrop_driver = os.path.join(os.path.abspath(src_dir),"foobar","lib","libfatrop_driver.so")
         if os.path.exists(fatrop_driver):
           shutil.copy(fatrop_driver, build_dir_abs)
