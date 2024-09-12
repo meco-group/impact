@@ -3054,7 +3054,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
         c_file_name_base = '{c_file_name_base}';
         casadi_codegen_file_name_base = '{casadi_codegen_file_name_base}';
         [build_dir,~,~] = fileparts(mfilename('fullpath'));
-        flags={{['-I' build_dir] ['-L' build_dir] ['-I' casadi.GlobalOptions.getCasadiIncludePath()] -DCASADI_PRINTF=mexPrintf ['-L' casadi.GlobalOptions.getCasadiPath()]}};
+        flags={{['-I' build_dir] ['-L' build_dir] ['-I' casadi.GlobalOptions.getCasadiIncludePath()] '-DCASADI_PRINTF=mexPrintf' ['-L' casadi.GlobalOptions.getCasadiPath()]}};
         files = {{[build_dir filesep s_function_file_name_base], [build_dir filesep c_file_name_base]}};
         """)
       for e in artifacts:
