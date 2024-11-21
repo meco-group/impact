@@ -3049,12 +3049,20 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
     m_build_file_name = os.path.join(build_dir_abs,"build.m")
     with open(m_build_file_name,"w") as out:
+      out.write("""
+      try
+        casadi.MX;
+      catch
+        error('This block depends on CasADi. Obtain it from install.casadi.org and make sure to have the casadi directory added to the matlab path.');
+      end
+
+      """)
       out.write(f"""
         s_function_file_name_base = '{s_function_file_name_base}';
         c_file_name_base = '{c_file_name_base}';
         casadi_codegen_file_name_base = '{casadi_codegen_file_name_base}';
         [build_dir,~,~] = fileparts(mfilename('fullpath'));
-        flags={{['-I' build_dir] ['-L' build_dir] ['-I' casadi.GlobalOptions.getCasadiIncludePath()] '-DCASADI_PRINTF=mexPrintf' ['-L' casadi.GlobalOptions.getCasadiPath()]}};
+        flags={{['-I' build_dir] ['-L' build_dir] '-DCASADI_PRINTF=mexPrintf' ['-I' casadi.GlobalOptions.getCasadiIncludePath()] ['-L' casadi.GlobalOptions.getCasadiPath()]}};
         files = {{[build_dir filesep s_function_file_name_base], [build_dir filesep c_file_name_base]}};
         """)
       for e in artifacts:
@@ -3190,7 +3198,19 @@ plt.show()
 
 
     port_labels_out.append("solver stats")
-    mask = Mask(port_labels_in=port_labels_in, port_labels_out=port_labels_out,port_in=port_in,block_name=name,name=mask_name,s_function=s_function_name,dependencies=[name+"_codegen", name],init_code=write_bus(solver_stats_type))
+
+    dependencies = f"""
+    try
+      casadi.load_nlpsol('ipopt')
+      casadi.load_nlpsol('fatrop')
+      casadi.load_conic('osqp')
+    catch
+      error('This block depends on CasADi >= 3.6.7 - Obtain it from install.casadi.org and make sure to have the casadi directory added to the matlab path.');
+    end
+
+    """
+
+    mask = Mask(port_labels_in=port_labels_in, port_labels_out=port_labels_out,port_in=port_in,block_name=name,name=mask_name,s_function=s_function_name,dependencies=[name+"_codegen", name],init_code=dependencies+write_bus(solver_stats_type))
     diag.add(mask)
     for fname,fun in zip(added_functions,self._added_functions):
       mask = Mask(port_labels_in=fun.name_in(), port_labels_out=fun.name_out(), block_name=fun.name(), name=fun.name(), s_function=fname[:-2])
