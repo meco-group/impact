@@ -1538,12 +1538,14 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
 
     hotstart_symbol = lam_g
     hotstart_symbol = MX(0,1)
-    
+
+    grid = self.sample(self.t, grid='control')[1]
+
     ocpfun = self.to_function(casadi_fun_name,
       [states]+(["z"] if is_coll else [MX()])+[controls]+[vvcat(variables)]+parameters+[hotstart_symbol],
-      [states,algebraics,controls,vvcat(variables),hotstart_symbol],
+      [states,algebraics,controls,vvcat(variables),hotstart_symbol, grid],
       ['x0','z0','u0','v0'] + parameter_names + ['hotstart_in'],
-      ['x','z','u','v'] + ['hotstart_out'])
+      ['x','z','u','v'] + ['hotstart_out']+['grid'])
 
     casadi_codegen_file_name_base = name+"_codegen.c"
     casadi_codegen_file_name = os.path.join(build_dir_abs,casadi_codegen_file_name_base)
@@ -1605,11 +1607,14 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
       sys_dae_fun = Function('dae_'+name,sys_dae,["x","u","z","p","t"],["ode","alg"])
       self.add_function(sys_dae_fun)
 
+    gridfun_options = {}
+    if modern_casadi():
+      gridfun_options["allow_free"] = True
     gridfun = Function("grid_"+name,
       parameters,
       [self.sample(self.t, grid='control')[1]],
       parameter_names,
-      ['grid'])
+      ['grid'], gridfun_options)
     if gridfun.has_free():
       gridfun = self.to_function("grid_"+name,
         parameters,
@@ -1671,7 +1676,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
       return ",".join(elems)
 
 
-    pool_names = ["x_initial_guess","z_initial_guess","u_initial_guess","v_initial_guess","p","x_opt","z_opt","u_opt","v_opt"]
+    pool_names = ["x_initial_guess","z_initial_guess","u_initial_guess","v_initial_guess","p","x_opt","z_opt","u_opt","v_opt","grid"]
 
     p_offsets = [0]
     for p in parameters:
@@ -1686,18 +1691,21 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
     z_nominal = self.initial_value(vec(algebraics))
     u_nominal = self.initial_value(vec(controls))
     v_nominal = self.initial_value(vvcat(variables))
+    grid_nominal = self.initial_value(grid)
 
     if isinstance(p_nominal,float): p_nominal = np.array([p_nominal])
     if isinstance(x_nominal,float): x_nominal = np.array([x_nominal])
     if isinstance(z_nominal,float): z_nominal = np.array([z_nominal])
     if isinstance(u_nominal,float): u_nominal = np.array([u_nominal])
     if isinstance(v_nominal,float): v_nominal = np.array([v_nominal])
+    if isinstance(grid_nominal,float): grid_nominal = np.array([grid_nominal])
 
     p_names = parameter_names
     x_names = [x.name() for x in self.states]
     z_names = [z.name() for z in self.algebraics]
     u_names = [u.name() for u in self.controls]
     v_names = variable_names
+    grid_names = ["t"]
 
 
     hello_p_normal_name = None
@@ -2092,6 +2100,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
     for u in self.controls:
       u_part_unit.append(u.numel())
       u_part_offset.append(u_part_offset[-1]+u.numel())
+    
+    grid_part_offset = [0,1]
+    grid_part_unit = [1]
 
     p_trajectory_length = [1 for p in self.parameters['']]+[self._method.N for p in self.parameters['control']]+[self._method.N+1 for p in self.parameters['control+']]
     x_trajectory_length = [self._method.N+1 for x in self.states]
@@ -2105,6 +2116,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
     z_part_stride = [self.nz for x in self.algebraics]
     u_part_stride = [self.nu for u in self.controls]
     v_part_stride = v_part_unit
+    grid_part_stride = grid_part_unit
 
     def array_size(n):
       if n==0: return 1
@@ -2184,6 +2196,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
             {prefix}pool* z_opt;
             {prefix}pool* u_opt;
             {prefix}pool* v_opt;
+            {prefix}pool* grid;
 
             casadi_real* hotstart_in;
             casadi_real* hotstart_out;
@@ -2211,6 +2224,11 @@ int {prefix}flag_value({prefix}struct* m, int index);
         yield ("x_current_trajectory_length","casadi_int")
         for p in prim: yield (f"{p}_nominal","casadi_real")
         yield ("x_current_nominal","casadi_real")
+        yield ("grid_names","char*")
+        yield ("grid_nominal","casadi_real")
+        yield ("grid_part_offset","casadi_int")
+        yield ("grid_part_unit","casadi_int")
+        yield ("grid_part_stride","casadi_int")
 
       for array_name, data_type in arrays():
         data = eval(array_name)
@@ -2368,6 +2386,19 @@ int {prefix}flag_value({prefix}struct* m, int index);
             """)
 
       out.write(f"""
+            m->grid = malloc(sizeof({prefix}pool));
+            m->grid->names = {prefix}grid_names;
+            m->grid->size = {grid_nominal.size};
+            m->grid->data = malloc(sizeof(casadi_real)*{max(grid_nominal.size,1)});
+            m->grid->n = 1;
+            m->grid->trajectory_length = {prefix}x_trajectory_length;
+            m->grid->stride = 1;
+            m->grid->part_offset = {prefix}grid_part_offset;
+            m->grid->part_unit = {prefix}grid_part_unit;
+            m->grid->part_stride = {prefix}grid_part_stride;
+          """)
+        
+      out.write(f"""
             m->hotstart_in = malloc(sizeof(casadi_real)*{max(hotstart_symbol.numel(),1)});
             m->hotstart_out = malloc(sizeof(casadi_real)*{max(hotstart_symbol.numel(),1)});
 
@@ -2376,6 +2407,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
             memcpy(m->z_opt->data, {prefix}z_nominal, {z_nominal.size}*sizeof(casadi_real));
             memcpy(m->u_opt->data, {prefix}u_nominal, {u_nominal.size}*sizeof(casadi_real));
             memcpy(m->v_opt->data, {prefix}v_nominal, {v_nominal.size}*sizeof(casadi_real));
+            memcpy(m->grid->data, {prefix}grid_nominal, {grid_nominal.size}*sizeof(casadi_real));
             for (i=0;i<{hotstart_symbol.numel()};++i) m->hotstart_out[i] = 0.0;
             {prefix}freshstart(m);
             return m;
@@ -2435,7 +2467,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
               free(m->u_opt->data);
               free(m->u_opt);
               free(m->v_opt->data);
-              free(m->v_opt);*/
+              free(m->v_opt);
+              free(m->grid->data);
+              free(m->grid);*/
               free(m);
             }}
           }}
@@ -2470,9 +2504,11 @@ int {prefix}flag_value({prefix}struct* m, int index);
             }} else if (!strcmp(name,"z_opt")) {{
               return m->z_opt;
             }} else if (!strcmp(name,"u_opt")) {{
-              return  m->u_opt;
+              return m->u_opt;
             }} else if (!strcmp(name,"v_opt")) {{
-              return  m->v_opt;
+              return m->v_opt;
+            }} else if (!strcmp(name,"grid")) {{
+              return m->grid;
             }} else {{
               m->fatal(m, "get_pool_by_name", "Pool with name '%s' not recognized. \
                                        Use one of: {pool_names}. \\n", name);
@@ -2698,6 +2734,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
             m->res_casadi[2] = m->u_opt->data;
             m->res_casadi[3] = m->v_opt->data;
             m->res_casadi[4] = m->hotstart_out;
+            m->res_casadi[5] = m->grid->data;
             return {casadi_call("eval","m->arg_casadi","m->res_casadi","m->iw_casadi","m->w_casadi","m->mem")};
           }}
 
@@ -2869,8 +2906,13 @@ int {prefix}flag_value({prefix}struct* m, int index);
             ssSetOutputPortMatrixDimensions(S, i, 1, 1);
             i++;""")
 
-      out.write(f"""
+      if not short_output:
+        out.write(f"""
+            {prefix}get_size(m, "grid", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
+            ssSetOutputPortMatrixDimensions(S, i, 1, n_col);
+            i++;""")
 
+      out.write(f"""
 #if MATLAB_MEX_FILE
             if (ssGetSimMode(S) != SS_SIMMODE_SIZES_CALL_ONLY) {{
                 DTypeId tid;
@@ -3007,6 +3049,10 @@ int {prefix}flag_value({prefix}struct* m, int index);
       if ignore_errors:
         out.write(f"""ssGetOutputPortRealSignal(S, i++)[0] = ret;
         """)
+
+      if not short_output:
+        out.write(f"""
+            {prefix}get(m, "grid", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);""")
 
       out.write(f"""
 
@@ -3184,6 +3230,8 @@ plt.show()
       port_labels_out.append("v_opt")
     if ignore_errors:
       port_labels_out.append("status code (0=good)")
+    if not short_output:
+      port_labels_out.append("grid")
     port_in = []
     for p in parameters_symbols:
       port_in.append(f"NaN({p.shape[0]},{p.shape[1]})")
