@@ -2906,12 +2906,6 @@ int {prefix}flag_value({prefix}struct* m, int index);
             ssSetOutputPortMatrixDimensions(S, i, 1, 1);
             i++;""")
 
-      if not short_output:
-        out.write(f"""
-            {prefix}get_size(m, "grid", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
-            ssSetOutputPortMatrixDimensions(S, i, 1, n_col);
-            i++;""")
-
       out.write(f"""
 #if MATLAB_MEX_FILE
             if (ssGetSimMode(S) != SS_SIMMODE_SIZES_CALL_ONLY) {{
@@ -2928,6 +2922,13 @@ int {prefix}flag_value({prefix}struct* m, int index);
             ssSetOutputPortBusMode(S, i, SL_BUS_MODE);
             ssSetBusOutputObjectName(S, i, (void *) "{solver_stats_type.name}");
             ssSetBusOutputAsStruct(S, i, 1);
+            i++;""")
+
+
+      if not short_output:
+        out.write(f"""
+            {prefix}get_size(m, "grid", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
+            ssSetOutputPortMatrixDimensions(S, i, 1, n_col);
             i++;
 
             ssSetNumSampleTimes(S, 1);
@@ -3050,15 +3051,17 @@ int {prefix}flag_value({prefix}struct* m, int index);
         out.write(f"""ssGetOutputPortRealSignal(S, i++)[0] = ret;
         """)
 
-      if not short_output:
-        out.write(f"""
-            {prefix}get(m, "grid", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);""")
-
       out.write(f"""
 
           {solver_stats_type.name}* stats = ({solver_stats_type.name}*) ssGetOutputPortRealSignal(S, i++);
           const {prefix}stats* s = {prefix}get_stats(m);
       """)
+
+      if not short_output:
+        out.write(f"""
+            {prefix}get(m, "grid", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);
+      """)
+
       for f in solver_stats_type.fields:
         out.write(f"          stats->{f.name} = s ? s->{f.name} : 0;\n")
 
@@ -3230,8 +3233,6 @@ plt.show()
       port_labels_out.append("v_opt")
     if ignore_errors:
       port_labels_out.append("status code (0=good)")
-    if not short_output:
-      port_labels_out.append("grid")
     port_in = []
     for p in parameters_symbols:
       port_in.append(f"NaN({p.shape[0]},{p.shape[1]})")
@@ -3246,7 +3247,6 @@ plt.show()
 
 
     port_labels_out.append("solver stats")
-
     dependencies = f"""
     try
       casadi.load_nlpsol('ipopt')
@@ -3258,7 +3258,10 @@ plt.show()
 
     """
 
+    if not short_output:
+      port_labels_out.append("grid")
     mask = Mask(port_labels_in=port_labels_in, port_labels_out=port_labels_out,port_in=port_in,block_name=name,name=mask_name,s_function=s_function_name,dependencies=[name+"_codegen", name],init_code=dependencies+write_bus(solver_stats_type))
+
     diag.add(mask)
     for fname,fun in zip(added_functions,self._added_functions):
       mask = Mask(port_labels_in=fun.name_in(), port_labels_out=fun.name_out(), block_name=fun.name(), name=fun.name(), s_function=fname[:-2])
