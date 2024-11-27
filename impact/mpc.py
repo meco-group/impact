@@ -2878,37 +2878,42 @@ int {prefix}flag_value({prefix}struct* m, int index);
             ssSetInputPortMatrixDimensions(S, i, 1, 1);
             ssSetInputPortRequiredContiguous(S, i, 1);
             i++;
+        """)
+      
 
-            if (!ssSetNumOutputPorts(S, {(2+(self.nz>0)+(self.nv>0)) + (1 if ignore_errors else 0)+1})) return;
-
-            i = 0;
-            {prefix}get_size(m, "x_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
-            ssSetOutputPortMatrixDimensions(S, i, n_row, {'1' if short_output else 'n_col'});
-            i++;""")
-
-      if self.nz>0:
-        out.write(f"""
-            {prefix}get_size(m, "z_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
-            ssSetOutputPortMatrixDimensions(S, i, n_row, n_col);
-            i++;""")
-
-      out.write(f"""
+      
+      def ports():
+        yield (f"""{prefix}get_size(m, "x_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
+            ssSetOutputPortMatrixDimensions(S, i, n_row, {'1' if short_output else 'n_col'});""",
+            f"""{prefix}get(m, "x_opt", IMPACT_ALL, {'1' if short_output else 'IMPACT_EVERYWHERE'}, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);""")
+        if self.nz>0:
+            yield (f"""
+          {prefix}get_size(m, "z_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
+          ssSetOutputPortMatrixDimensions(S, i, n_row, n_col);""",
+            f"""{prefix}get(m, "z_opt", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);"""
+            )
+        yield (f"""
             {prefix}get_size(m, "u_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
             ssSetOutputPortMatrixDimensions(S, i, n_row, {'1' if short_output else 'n_col'});
-            i++;""")
-
-      if self.nv>0:
-        out.write(f"""
+            """,
+            f"""{prefix}get(m, "u_opt", IMPACT_ALL, {'0' if short_output else 'IMPACT_EVERYWHERE'}, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);""")
+        
+        if self.nv>0:
+          yield (f"""
             {prefix}get_size(m, "v_opt", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
-            ssSetOutputPortMatrixDimensions(S, i, n_row, n_col);
-            i++;""")
+          ssSetOutputPortMatrixDimensions(S, i, n_row, n_col);
+          """,
+          f"""{prefix}get(m, "v_opt", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);"""
+            )
 
-      if ignore_errors:
-        out.write(f"""
-            ssSetOutputPortMatrixDimensions(S, i, 1, 1);
-            i++;""")
-
-      out.write(f"""
+        if ignore_errors:
+          yield (f"""
+              ssSetOutputPortMatrixDimensions(S, i, 1, 1);
+              """,
+              """ssGetOutputPortRealSignal(S, i++)[0] = ret;"""
+              )
+          
+        yield (f"""
 #if MATLAB_MEX_FILE
             if (ssGetSimMode(S) != SS_SIMMODE_SIZES_CALL_ONLY) {{
                 DTypeId tid;
@@ -2924,15 +2929,29 @@ int {prefix}flag_value({prefix}struct* m, int index);
             ssSetOutputPortBusMode(S, i, SL_BUS_MODE);
             ssSetBusOutputObjectName(S, i, (void *) "{solver_stats_type.name}");
             ssSetBusOutputAsStruct(S, i, 1);
+            """,
+            f"""{solver_stats_type.name}* stats = ({solver_stats_type.name}*) ssGetOutputPortRealSignal(S, i++);
+          const {prefix}stats* s = {prefix}get_stats(m);"""
+            )
+        if not short_output:
+          yield (f"""
+            {prefix}get_size(m, "grid", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
+            ssSetOutputPortMatrixDimensions(S, i, n_row, n_col);
+          """,
+          f"""{prefix}get(m, "grid", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);"""
+          )
+        
+      out.write(f"""
+            if (!ssSetNumOutputPorts(S, {len(list(ports()))})) return;
+            i = 0;
+            """)
+      for init,_ in ports():
+        out.write(f"""
+            {init}
             i++;""")
 
 
-      if not short_output:
-        out.write(f"""
-            {prefix}get_size(m, "grid", IMPACT_ALL, IMPACT_EVERYWHERE, IMPACT_FULL, &n_row, &n_col);
-            ssSetOutputPortMatrixDimensions(S, i, 1, n_col);
-            i++;
-
+      out.write(f"""
             ssSetNumSampleTimes(S, 1);
             
             ssSetNumNonsampledZCs(S, 0);
@@ -3034,36 +3053,12 @@ int {prefix}flag_value({prefix}struct* m, int index);
                 #endif
             }}
 
-            i = 0;
-            {prefix}get(m, "x_opt", IMPACT_ALL, {'1' if short_output else 'IMPACT_EVERYWHERE'}, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);""")
-      if self.nz>0:
+            i = 0;""")
+      for _,update in ports():
         out.write(f"""
-            {prefix}get(m, "z_opt", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);""")
-
-      out.write(f"""
-            {prefix}get(m, "u_opt", IMPACT_ALL, {'0' if short_output else 'IMPACT_EVERYWHERE'}, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);
-
-            """)
-      if self.nv>0:
-        out.write(f"""
-            {prefix}get(m, "v_opt", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);""")
-
-
-      if ignore_errors:
-        out.write(f"""ssGetOutputPortRealSignal(S, i++)[0] = ret;
+          {update}
         """)
-
-      out.write(f"""
-
-          {solver_stats_type.name}* stats = ({solver_stats_type.name}*) ssGetOutputPortRealSignal(S, i++);
-          const {prefix}stats* s = {prefix}get_stats(m);
-      """)
-
-      if not short_output:
-        out.write(f"""
-            {prefix}get(m, "grid", IMPACT_ALL, IMPACT_EVERYWHERE, ssGetOutputPortRealSignal(S, i++), IMPACT_FULL);
-      """)
-
+          
       for f in solver_stats_type.fields:
         out.write(f"          stats->{f.name} = s ? s->{f.name} : 0;\n")
 
