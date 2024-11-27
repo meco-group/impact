@@ -2110,6 +2110,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
     u_trajectory_length = [self._method.N for x in self.controls]
     x_current_trajectory_length = [1 for x in self.states]
     v_trajectory_length = [1 for v in self.variables['']]+[self._method.N for v in self.variables['control']]+[self._method.N+1 for v in self.variables['control+']]
+    grid_trajectory_length = [self._method.N+1]
 
     p_part_stride = p_part_unit
     x_part_stride = [self.nx for x in self.states]
@@ -2229,6 +2230,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
         yield ("grid_part_offset","casadi_int")
         yield ("grid_part_unit","casadi_int")
         yield ("grid_part_stride","casadi_int")
+        yield ("grid_trajectory_length","casadi_int")
 
       for array_name, data_type in arrays():
         data = eval(array_name)
@@ -2391,7 +2393,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
             m->grid->size = {grid_nominal.size};
             m->grid->data = malloc(sizeof(casadi_real)*{max(grid_nominal.size,1)});
             m->grid->n = 1;
-            m->grid->trajectory_length = {prefix}x_trajectory_length;
+            m->grid->trajectory_length = {prefix}grid_trajectory_length;
             m->grid->stride = 1;
             m->grid->part_offset = {prefix}grid_part_offset;
             m->grid->part_unit = {prefix}grid_part_unit;
