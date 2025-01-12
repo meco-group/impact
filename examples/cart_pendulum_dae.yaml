@@ -9,6 +9,10 @@ equations:
       dw: ddw
     alg:
       - (X-w)*(ddx - ddw) + Y*ddy + dy*dy + (dx-dw)**2
+    outputs:
+      ddx: (w-X)*xa/m
+      ddy: g-Y*xa/m
+      ddw: ((X-w)*xa - U)/M
 differential_states: 
   - name: X
   - name: Y
@@ -21,10 +25,9 @@ algebraic_states:
 controls: 
   - name: U
 outputs:
-  inline:
-    ddx: (w-X)*xa/m
-    ddy: g-Y*xa/m
-    ddw: ((X-w)*xa - U)/M
+  - name: ddx
+  - name: ddy
+  - name: ddw
 constants:
   inline:
     M:     1     #  mass [kg]

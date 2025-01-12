@@ -5,6 +5,7 @@ keywords = {"x","u","z","p","c","y"}
 for k in set(keywords):
   keywords.add("n"+k)
 keywords.add("all")
+keywords.add("ode")
 
 class DotDict(object):
   """like a dict but access through . """

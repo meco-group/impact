@@ -1,7 +1,7 @@
 """MPC class of Impact."""
 from re import X
 from rockit import Ocp, rockit_pickle_context, rockit_unpickle_context
-from casadi import Function, MX, vcat, vvcat, veccat, GlobalOptions, vec, CodeGenerator
+from casadi import Function, MX, vcat, vvcat, veccat, GlobalOptions, vec, CodeGenerator, DaeBuilder, vertsplit, DM
 from rockit.casadi_helpers import prepare_build_dir
 import casadi
 import yaml
@@ -91,7 +91,8 @@ def write_bus(s):
   return ret
 
 dae_keys = {"x": "differential_states", "z": "algebraic_states", "p": "parameters", "u": "controls"}
-dae_rockit = {"x": "state", "z": "algebraic", "p": "parameter", "u": "control"}
+dae_rockit_normal = {"x": "state", "z": "algebraic", "p": "parameter", "u": "control"}
+dae_rockit_sys_id = {"x": "state", "z": "algebraic", "p": "variable", "u": "parameter"}
 
 
 # keywords = {"x","u","z","p","c","y"}
@@ -1166,7 +1167,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
 
     return F
 
-  def add_model(self,name,file_name):
+  def add_model(self,name,file_name,mode='normal'):
     """Creates a model based on a yaml file
 
         :param name: Name of the model
@@ -1175,10 +1176,20 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
         :param file_name: Path to the yaml file
         :type name: string
 
+        :param mode: normal or sys_id - in sys_id, parameters are promoted to variables and controls become parameters
+        :type mode: string
+
         :return: model
         :rtype: Model
 
     """
+
+    if mode=="sys_id":
+      dae_rockit = dae_rockit_sys_id
+    elif mode=="normal":
+      dae_rockit = dae_rockit_normal
+    else:
+      raise Exception("Unknown mode: '%s' - pick 'normal' or 'sys_id'" % mode)
 
     # Read meta information
     with open(file_name) as file:
@@ -1212,11 +1223,26 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
 
     if "external" in equations:
       external = equations["external"]
-      assert external["type"]=="casadi_serialized"
+
       model_file_name = os.path.expanduser(external["file_name"])
       if not os.path.isabs(model_file_name):
         model_file_name = os.path.join(os.path.dirname(file_name),model_file_name)
-      model = Function.load(model_file_name)
+      if external["type"]=="casadi_serialized":
+        model = Function.load(model_file_name)
+      elif external["type"]=="fmu":
+        unzipped_path = name+"_unzipped"
+
+        import shutil
+        #if os.path.isdir(unzipped_path): shutil.rmtree(unzipped_path)  
+        # Unzip
+        import zipfile
+        #with zipfile.ZipFile(model_file_name, 'r') as zip_ref: zip_ref.extractall(unzipped_path)
+
+        dae = DaeBuilder(name, unzipped_path)
+
+        model = dae.create('f', ['x', 'u', 'p'], ['ode','ydef'])
+      else:
+        raise Exception("Unknown external type: %s" % external["type"])
       # Make sure the CasADi Function adheres to a standard
       expected_names = dae_keys.keys()
       unknowns = set(model.name_in()).difference(set(expected_names))
@@ -1237,13 +1263,13 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
     # Loop over dae variables, e.g. key=x, long_name=differential_states
     for key, long_name in dae_keys.items():
       # Get corresponding rockit syntax name
-      rockit_name = dae_rockit[key]
-
+      rockit_name = dae_rockit[key] if key in dae_rockit else None
       # If we have a model already (externally defined), retrieve variable length
       if model:
         var_len = model.numel_in(key) if key in model.name_in() else 0
       else:
         var_len = 0
+      
       if var_len or not model:
         if long_name in model_meta:
           s = m._register(key,model_meta[long_name])
@@ -1254,17 +1280,39 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
             assert v.numel()==var_len
           else:
             var_len = v.numel()
-          register = getattr(self,"register_"+rockit_name)
-          for e in v.primitives():
-            register(e)
+          if rockit_name:
+            register = getattr(self,"register_"+rockit_name)
+            for e in v.primitives():
+              register(e)
         else:
           if model:
             v = getattr(self,rockit_name)("dummy",var_len)
-            #m._register(key, v)
           else:
             v = MX(0, 1)
         args[key] = v
       nd[key] = var_len
+
+    if model:
+      if "ydef" in model.name_out():
+        var_len = model.numel_out("ydef")
+      else:
+        var_len = 0
+      if var_len>0:
+        assert "outputs" in model_meta
+        names["y"] = [e['name'] for e in model_meta["outputs"]]
+      else:
+        names["y"] = []
+    else:
+      if "outputs" in model_meta:
+        names["y"] = [e['name'] for e in model_meta["outputs"]]
+      else:
+        names["y"] = []
+
+    if 'parameters' in model_meta:
+      # Retrieve parameter values
+      for p in model_meta['parameters']:
+        self.set_value(getattr(m,p['name']),p['value'])
+        m._register('p_val',{p['name']+'_val': DM(p['value'])})
 
     # Define Outputs
     outputs = {}
@@ -1273,13 +1321,6 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
     for k,v in m._d.items():
       if k.startswith(name+"."):
         locals[k[len(name)+1:]] = v
-    if "outputs" in model_meta:
-      if "inline" in model_meta["outputs"]:
-        for k,v in model_meta["outputs"]["inline"].items():
-          outputs[k] = eval(v,casadi.__dict__,locals)
-    m._register("y", outputs)
-    locals.update(outputs)
-
 
     if "external" in equations:
       model_res = model(**args)
@@ -1288,6 +1329,19 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
     if "inline" in equations:
       model_res = {}
       inline = equations["inline"]
+
+      if "outputs" in inline:
+        outputs = inline["outputs"]
+        outputs_ordered = []
+        for local_name in names["y"]:
+          if local_name not in outputs:
+            raise Exception()
+          output = eval(outputs[local_name],casadi.__dict__,locals)
+          outputs_ordered.append(output)
+          locals[local_name] = output
+        model_res["ydef"] = vvcat(outputs_ordered)
+        assert len(names["y"])==len(outputs)
+
       if "ode" in inline:
         ode = inline["ode"]
         rhs_ordered = []
@@ -1305,18 +1359,23 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
           alg_ordered.append(eval(e,casadi.__dict__,locals))
         model_res["alg"] = vvcat(alg_ordered)
 
+
+
       model_res["ode"] = casadi.cse(model_res["ode"])
 
-
+    ode = MX(0,1)
+    alg = MX(0,1)
     if nd["x"]:
       assert "ode" in model_res
-      self.set_der(m.x, model_res["ode"])
+      ode = model_res["ode"]
+      self.set_der(m.x, ode)
     if nd["z"]:
       assert "alg" in model_res
       self.add_alg(model_res["alg"])
 
-
-    self.expr._update({name: m})
+    if "ydef" in model_res:
+      m._register("y",dict(zip(names["y"],vertsplit(model_res["ydef"]))))
+    m._update({"ode": ode, "alg": alg},allow_keyword=True)
     return m
 
   @staticmethod
@@ -1569,9 +1628,11 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
       sim_p = []
       for p,appearing in zip(parameters_symbols,self.is_parameter_appearing_in_sys()):
         if appearing:
-          args.append(p)
           sim_p.append(p)
       sim_p = vvcat(sim_p)
+      if sim_p.numel()>0:
+        args.append(sim_p)
+        label_in.append("p")
       sim_args["p"] = sim_p
 
       if self.is_sys_time_varying():

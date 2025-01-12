@@ -1,6 +1,7 @@
 from .mpc import MPC
 from .model import Model
 from .dotdict import DotDict
+from .helpers import simulink_parse_states
 from rockit import DirectCollocation, MultipleShooting, SingleShooting, matlab_path, external_method
 import os
 

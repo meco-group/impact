@@ -1,8 +1,19 @@
 classdef MPC < rockit.Ocp & rockit.Stage
+  % This should be a description of the MPC class.
+  %   It's common for programmers to give a code example inside of their
+  %   docstring::
+  % 
+  %       from impact import MPC
+  %       mpc = MPC(T=2.0)
+  % 
+  %   Here is a link to :py:meth:`__init__`.
+  %   
   properties
   end
   methods
     function obj = MPC(varargin)
+      % Inits MPC class.
+      % Arguments: kwargs
       obj@rockit.Ocp('from_super');
       obj@rockit.Stage('from_super');
       if length(varargin)==1 && ischar(varargin{1}) && strcmp(varargin{1},'from_super'),return,end
@@ -22,6 +33,8 @@ classdef MPC < rockit.Ocp & rockit.Stage
       end
     end
     function varargout = control(obj,varargin)
+      % Defines control variable
+      % Arguments: args, kwargs
       global pythoncasadiinterface
       [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,-inf,{'name','args','kwargs'});
       if isempty(kwargs)
@@ -74,12 +87,12 @@ classdef MPC < rockit.Ocp & rockit.Stage
     function varargout = add_simulink_fmu(obj,varargin)
       % 
       % Arguments: name, verbose=True
-      %     Not supported: 
-      %      * time dependence
-      %      * delays
-      %     Perhpas SS is better
-      %     Caveats:
-      %      * scaling for finite diff
+      %       Not supported: 
+      %       * time dependence
+      %       * delays
+      %       Perhpas SS is better
+      %       Caveats:
+      %       * scaling for finite diff
       %     
       global pythoncasadiinterface
       [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,1,{'name','verbose'});
@@ -91,6 +104,19 @@ classdef MPC < rockit.Ocp & rockit.Stage
       varargout = pythoncasadiinterface.python2matlab_ret(res);
     end
     function varargout = add_model(obj,varargin)
+      % Creates a model based on a yaml file
+      % Arguments: name, file_name
+      % 
+      %         :param name: Name of the model
+      %         :type name: string
+      % 
+      %         :param file_name: Path to the yaml file
+      %         :type name: string
+      % 
+      %         :return: model
+      %         :rtype: Model
+      % 
+      %     
       global pythoncasadiinterface
       [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,2,{'name','file_name'});
       if isempty(kwargs)
@@ -174,7 +200,7 @@ classdef MPC < rockit.Ocp & rockit.Stage
 
     varargin = [varargin {'context','matlab'}];
       global pythoncasadiinterface
-      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,1,{'name','src_dir','use_codegen','context','ignore_errors','short_output','qp_error_on_fail'});
+      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,1,{'name','src_dir','use_codegen','context','ignore_errors','short_output','qp_error_on_fail','c_flags'});
       if isempty(kwargs)
         res = obj.parent.export(args{:});
       else

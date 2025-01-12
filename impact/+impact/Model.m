@@ -1,4 +1,5 @@
 classdef Model < impact.DotDict
+  % This should be a description of the Model class.
   properties
   end
   methods
