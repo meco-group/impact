@@ -1321,6 +1321,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
     for k,v in m._d.items():
       if k.startswith(name+"."):
         locals[k[len(name)+1:]] = v
+    locals["sq"] = lambda x: x**2
 
     if "external" in equations:
       model_res = model(**args)
