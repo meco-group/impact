@@ -26,11 +26,25 @@ function [] = export_simulink_model(mdl, export_filename)
 
     % from Simulink model collect all states ( ContinuousStateAttributes State Name)
     
-    input_names = cellstr(dae.u());
-    parameter_names = cellstr(dae.p());
-
+    input_names = dae.u();
+    if isempty(input_names)
+        input_names = {};
+    else
+        input_names = cellstr(input_names);
+    end
+    parameter_names = dae.p();
+    if isempty(parameter_names)
+        parameter_names = {};
+    else
+        parameter_names = cellstr(parameter_names);
+    end
     % Simulink.fmuexport.GetExportableVariableList(mdl,'output','flat'); % contains no dimension info
-    output_names = cellstr(dae.y());
+    output_names = dae.y();
+    if isempty(output_names)
+        output_names = {};
+    else
+        output_names = cellstr(output_names);
+    end
 
     state_names = impact.simulink_parse_states(mdl,unzipped_path);
 
@@ -53,23 +67,31 @@ function [] = export_simulink_model(mdl, export_filename)
     fprintf(fid, '    file_name: %s\n', [mdl '.fmu']);
 
 
-    fprintf(fid, 'differential_states:\n');
-    for i=1:length(state_names)
-        fprintf(fid, '  - name: %s\n', state_names{i});
+    if ~isempty(state_names)
+        fprintf(fid, 'differential_states:\n');
+        for i=1:length(state_names)
+            fprintf(fid, '  - name: %s\n', state_names{i});
+        end
     end
-    fprintf(fid, 'controls:\n');
-    for i=1:length(input_names)
-        fprintf(fid, '  - name: %s\n', input_names{i});
+    if ~isempty(input_names)
+        fprintf(fid, 'controls:\n');
+        for i=1:length(input_names)
+            fprintf(fid, '  - name: %s\n', input_names{i});
+        end
     end
-    fprintf(fid, 'outputs:\n');
-    for i=1:length(output_names)
-        fprintf(fid, '  - name: %s\n', output_names{i});
+    if ~isempty(output_names)
+        fprintf(fid, 'outputs:\n');
+        for i=1:length(output_names)
+            fprintf(fid, '  - name: %s\n', output_names{i});
+        end
     end
-    fprintf(fid, 'parameters:\n');
-    for i=1:length(parameter_names)
-        assert(strcmp(parameter_names{i},par_names{i}))
-        fprintf(fid, '  - name: %s\n', parameter_names{i});
-        fprintf(fid, '    value: %.18e\n', par_values(i));
+    if ~isempty(parameter_names)
+        fprintf(fid, 'parameters:\n');
+        for i=1:length(parameter_names)
+            assert(strcmp(parameter_names{i},par_names{i}))
+            fprintf(fid, '  - name: %s\n', parameter_names{i});
+            fprintf(fid, '    value: %.18e\n', par_values(i));
+        end
     end
     fclose(fid);
 end

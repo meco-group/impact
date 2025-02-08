@@ -1260,6 +1260,13 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
     names = {}
     nd = {}
 
+    def sanitize_name(name):
+      if isinstance(name,str):
+        return name.replace(".","__")
+      else:
+        name['name'] = sanitize_name(name['name'])
+        return name
+
     # Loop over dae variables, e.g. key=x, long_name=differential_states
     for key, long_name in dae_keys.items():
       # Get corresponding rockit syntax name
@@ -1272,7 +1279,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
       
       if var_len or not model:
         if long_name in model_meta:
-          s = m._register(key,model_meta[long_name])
+          s = m._register(key,[sanitize_name(e) for e in model_meta[long_name]])
           names[key] = s._names
           locals.update(dict(zip(s._names,s._symbols)))
           v = getattr(m,key)
@@ -1291,6 +1298,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
             v = MX(0, 1)
         args[key] = v
       nd[key] = var_len
+    
 
     if model:
       if "ydef" in model.name_out():
@@ -1299,20 +1307,20 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
         var_len = 0
       if var_len>0:
         assert "outputs" in model_meta
-        names["y"] = [e['name'] for e in model_meta["outputs"]]
+        names["y"] = [sanitize_name(e['name']) for e in model_meta["outputs"]]
       else:
         names["y"] = []
     else:
       if "outputs" in model_meta:
-        names["y"] = [e['name'] for e in model_meta["outputs"]]
+        names["y"] = [sanitize_name(e['name']) for e in model_meta["outputs"]]
       else:
         names["y"] = []
 
     if 'parameters' in model_meta:
       # Retrieve parameter values
       for p in model_meta['parameters']:
-        self.set_value(getattr(m,p['name']),p['value'])
-        m._register('p_val',{p['name']+'_val': DM(p['value'])})
+        self.set_value(getattr(m,sanitize_name(p['name'])),p['value'])
+        m._register('p_val',{sanitize_name(p['name'])+'_val': DM(p['value'])})
 
     # Define Outputs
     outputs = {}
