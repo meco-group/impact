@@ -1,6 +1,7 @@
 """MPC class of Impact."""
 from re import X
 from rockit import Ocp, rockit_pickle_context, rockit_unpickle_context
+from rockit.external.method import SourceArtifact, LibraryArtifact, HeaderDirectory
 from casadi import Function, MX, vcat, vvcat, veccat, GlobalOptions, vec, CodeGenerator, DaeBuilder, vertsplit, DM
 from rockit.casadi_helpers import prepare_build_dir
 import casadi
@@ -1565,10 +1566,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
 
     prepare_build_dir(build_dir_abs)
 
-    artifacts = list(self._method.artifacts)
-
-    for e in artifacts:
-      shutil.copy(os.path.join(self._method.build_dir_abs, e.name), build_dir_abs)
+    artifacts = self._method.artifacts
     print(self.x)
     print(self.z)
     print(self.u)
@@ -1691,7 +1689,8 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
         [self.sample(self.t, grid='control')[1]],
         parameter_names,
         ['grid'])
-    self.add_function(gridfun)
+    if not short_output:
+      self.add_function(gridfun)
 
     costfun_options = {}
     if modern_casadi():
@@ -3182,8 +3181,13 @@ int {prefix}flag_value({prefix}struct* m, int index);
         files = {{[build_dir filesep s_function_file_name_base], [build_dir filesep c_file_name_base]}};
         """)
       for e in artifacts:
-        if ".c" in e.name:
-          out.write(f"""           files = [files {{[build_dir filesep '{os.path.basename(e.name)}']}}];\n""")
+        if isinstance(e, HeaderDirectory):
+          out.write(f"""           flags = [flags {{['-I' build_dir filesep '{e.dir}']}}];\n""")
+        if isinstance(e, LibraryArtifact):
+          out.write(f"""           flags = [flags {{['-l{e.basename}']}}];\n""")
+      for e in artifacts:
+        if isinstance(e, SourceArtifact):
+          out.write(f"""           files = [files {{[build_dir filesep '{e.relative}']}}];\n""")
       if use_codegen:
 
         ipopt = ''
@@ -3339,14 +3343,24 @@ plt.show()
     make_file_name = os.path.join(build_dir_abs,"Makefile")
 
     source_files = [casadi_codegen_file_name]
+
     for e in artifacts:
-      if ".c" in e.name:
-        source_files.append(os.path.join(build_dir_abs, e.name))
+      if isinstance(e, SourceArtifact):
+        source_files.append(os.path.join(build_dir_abs, e.relative))
+
+    for e in artifacts:
+      e.copy_to_build_dir(build_dir_abs)
+
       
     with open(make_file_name,"w") as out:
 
       flags = ["-pedantic","-Wall","-Wextra","-Wno-unknown-pragmas","-Wno-long-long","-Wno-unused-parameter","-Wno-unused-const-variable","-Wno-sign-compare","-Wno-unused-but-set-variable","-Wno-unused-variable","-Wno-endif-labels"]
       deps = ["-I"+build_dir_abs,"-L"+build_dir_abs,"-Wl,-rpath="+build_dir_abs,"-L"+GlobalOptions.getCasadiPath(),"-I"+GlobalOptions.getCasadiIncludePath(),"-Wl,-rpath="+GlobalOptions.getCasadiPath()]
+      for e in artifacts:
+        if isinstance(e, HeaderDirectory):
+          deps+=e.get_flags(build_dir_abs)
+
+
       if use_codegen:
         lib_codegen_file_name = os.path.join(build_dir_abs,"lib" + name + "_codegen.so")
         lib_codegen_compile_commands = ["gcc"]+c_flags+["-fPIC","-shared"]+source_files+ ["-lm","-o"+lib_codegen_file_name]+deps
@@ -3362,6 +3376,10 @@ plt.show()
 
       else:
         deps += ["-lcasadi"]
+
+      for e in artifacts:
+        if isinstance(e, LibraryArtifact):
+          deps += ["-l" + e.basename]
       lib_compile_commands = ["gcc"]+c_flags+["-fPIC","-shared",c_file_name,"-o"+lib_file_name]+deps+flags
 
       hello_compile_commands = ["gcc"]+c_flags+[hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-o",hello_file_name]+deps+flags

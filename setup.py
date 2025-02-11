@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 import glob
 import os
 
-version = "0.3.1"
+version = "0.3.2"
 
 print(find_packages(exclude=['tests', 'examples']))
 
@@ -25,7 +25,7 @@ setup(
         'casadi>=3.5,<4.0',
         'pyyaml',
         'lxml',
-        'rockit-meco>=0.1.35',
+        'rockit-meco>=0.4.6',
     ],
     download_url='https://gitlab.kuleuven.be/meco-software/impact/-/archive/v%s/impact-v%s.tar.gz' % (version, version)
 )
