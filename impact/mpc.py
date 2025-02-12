@@ -1241,7 +1241,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
 
         dae = DaeBuilder(name, unzipped_path)
 
-        model = dae.create('f', ['x', 'u', 'p'], ['ode','ydef'])
+        model = dae.create('f', ['x', 'u', 'p'], ['ode','ydef'],{"new_forward":False})
       else:
         raise Exception("Unknown external type: %s" % external["type"])
       # Make sure the CasADi Function adheres to a standard
