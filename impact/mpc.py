@@ -1756,11 +1756,17 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
       v_offsets.append(v_offsets[-1]+v.numel())
 
     p_nominal = self.initial_value(vvcat(parameters))
+    if isinstance(p_nominal,float): p_nominal = np.array([p_nominal])
     x_nominal = self.initial_value(vec(states))
+    if isinstance(x_nominal,float): x_nominal = np.array([x_nominal])
     z_nominal = self.initial_value(vec(algebraics))
+    if isinstance(z_nominal,float): z_nominal = np.array([z_nominal])
     u_nominal = self.initial_value(vec(controls))
+    if isinstance(u_nominal,float): u_nominal = np.array([u_nominal])
     v_nominal = self.initial_value(vvcat(variables))
+    if isinstance(v_nominal,float): v_nominal = np.array([v_nominal])
     grid_nominal = self.initial_value(grid)
+    if isinstance(grid_nominal,float): grid_nominal = np.array([grid_nominal])
 
     if isinstance(p_nominal,float): p_nominal = np.array([p_nominal])
     if isinstance(x_nominal,float): x_nominal = np.array([x_nominal])
@@ -1809,6 +1815,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
       raise Exception("You must define a parameter named 'x_current'")
 
     x_current_nominal = self.initial_value(parameters[i_x_current])
+    if isinstance(x_current_nominal,float): x_current_nominal = np.array([x_current_nominal])
 
     c_file_name_base = name+".c"
     c_file_name = os.path.join(build_dir_abs,c_file_name_base)
@@ -2831,7 +2838,43 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
     s_function_file_name_base = s_function_name+".c"
     s_function_file_name = os.path.join(build_dir_abs,s_function_file_name_base)
-      
+
+    make_cfg_name = s_function_name+"_makecfg"
+
+    make_cfg_file_name_base = make_cfg_name+".m"
+    make_cfg_file_name = os.path.join(build_dir_abs,make_cfg_file_name_base)
+    
+
+    with open(make_cfg_file_name,"w") as out:
+      out.write(f"""
+      function {make_cfg_name}(objBuildinfo)
+      """)
+      for e in artifacts:
+        if isinstance(e, SourceArtifact):
+          out.write(f"""
+          addSourceFiles(objBuildinfo,'{e.relative}','$(START_DIR)');
+          """)
+        if isinstance(e, HeaderDirectory):
+          out.write(f"""
+          addIncludePaths(objBuildinfo,['$(START_DIR)' filesep '{e.dir}'])
+          """)
+      out.write(f"""
+      addDefines(myBuildInfo,'-DLA_HIGH_PERFORMANCE=ON','OPTS');
+      addDefines(myBuildInfo,'-DBLASFEO_REF_API=ON','OPTS');
+      addDefines(myBuildInfo,'-DMF_PANELMAJ=ON','OPTS');  
+      addDefines(myBuildInfo,'-DK_MAX_STACK=300','OPTS');       
+      addDefines(myBuildInfo,'-DUSE_C99_MATH=ON','OPTS');
+      addDefines(myBuildInfo,'-DEXT_DEP=ON','OPTS');
+      addDefines(myBuildInfo,'-DOS_LINUX=ON','OPTS');
+      addDefines(myBuildInfo,'-DEXTERNAL_BLAS_NONE=ON','OPTS');
+      addDefines(myBuildInfo,'-DTARGET_X64_INTEL_CORE=ON','OPTS');
+      addDefines(myBuildInfo,'-DRELEASE=ON','OPTS');
+      addDefines(myBuildInfo,'-DLEVEL1_DCACHE_LINE_SIZE=','OPTS');
+      addDefines(myBuildInfo,'-DPANEL_SIZE=','OPTS');    
+      """)
+                
+      out.write("end")
+
     with open(s_function_file_name,"w") as out:
       out.write(f"""
         #define S_FUNCTION_NAME {s_function_name}
