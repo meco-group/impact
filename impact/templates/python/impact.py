@@ -1,6 +1,7 @@
 from ctypes import *
 import numpy as np
 import os
+import platform
 
 try:
     import casadi
@@ -22,8 +23,10 @@ class Impact:
 
         # PyDLL instead of CDLL to keep GIL:
         # virtual machine emits Python prints
-        if os.name == "nt":
+        if platform.system()=='Windows':
             libname = name+".dll"
+        elif platform.system()=='Darwin':
+            libname = "lib"+name+".dylib"
         else:
             libname = "lib"+name+".so"
         self.lib = PyDLL(os.path.join(build_dir_abs,libname))
