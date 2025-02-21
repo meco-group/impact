@@ -3206,52 +3206,72 @@ int {prefix}flag_value({prefix}struct* m, int index);
       added_functions.append(fun2s_function(fun, dir=build_dir_abs,ignore_errors=ignore_errors,build_dir_abs=build_dir_abs))
 
     m_build_file_name = os.path.join(build_dir_abs,"build.m")
-    with open(m_build_file_name,"w") as out:
-      out.write("""
-      try
-        casadi.MX;
-      catch
-        error('This block depends on CasADi. Obtain it from install.casadi.org and make sure to have the casadi directory added to the matlab path.');
-      end
 
-      """)
+    # If it were not for CASADI_PRINTF=mexPrintf (and perphaps PATH things on Windows), weould go for something much simpler:
+    with open(m_build_file_name,"w") as out:
       out.write(f"""
         s_function_file_name_base = '{s_function_file_name_base}';
-        c_file_name_base = '{c_file_name_base}';
-        casadi_codegen_file_name_base = '{casadi_codegen_file_name_base}';
         [build_dir,~,~] = fileparts(mfilename('fullpath'));
-        flags={{['-I' build_dir] ['-L' build_dir] '-DCASADI_PRINTF=mexPrintf' ['-I' casadi.GlobalOptions.getCasadiIncludePath()] ['-L' casadi.GlobalOptions.getCasadiPath()]}};
-        files = {{[build_dir filesep s_function_file_name_base], [build_dir filesep c_file_name_base]}};
+        flags={{['-I' build_dir] ['-L' build_dir] '-DCASADI_PRINTF=mexPrintf' '-l{name}'}};
+        files = {{[build_dir filesep s_function_file_name_base]}};
         """)
-      for e in artifacts:
-        if isinstance(e, HeaderDirectory):
-          out.write(f"""           flags = [flags {{['-I' build_dir filesep '{e.dir}']}}];\n""")
-        if isinstance(e, LibraryArtifact):
-          out.write(f"""           flags = [flags {{['-l{e.basename}']}}];\n""")
-      for e in artifacts:
-        if isinstance(e, SourceArtifact):
-          out.write(f"""           files = [files {{[build_dir filesep '{e.relative}']}}];\n""")
-      if use_codegen:
 
-        ipopt = ''
-        if modern_casadi():
-          ipopt = "'-lipopt' '-lfatrop' '-lblasfeo'"
-        out.write(f"""
-          files=[files {{ [build_dir filesep casadi_codegen_file_name_base]}}];
-          flags=[flags {{['-I' casadi.GlobalOptions.getCasadiIncludePath()] ['-I' casadi.GlobalOptions.getCasadiPath()] '-losqp' {ipopt}}}];
-          """)
-      else:
-        out.write(f"""
-          flags=[flags {{'-lcasadi'}}];
-          """)
       out.write(f"""
       if ispc
       else
-        flags=[flags {{'-g' ['LDFLAGS=\"\$LDFLAGS -Wl,-rpath,' casadi.GlobalOptions.getCasadiPath() ' -Wl,-rpath,' build_dir '\"']}}];
+        flags=[flags {{['LDFLAGS=\"\$LDFLAGS -Wl,-rpath,' build_dir '\"']}}];
       end
       mex(flags{{:}},files{{:}});\n""")
       for f_name in added_functions:
         out.write(f"mex(flags{{:}}, [build_dir filesep '{f_name}']);\n")
+
+    if False:
+      with open(m_build_file_name,"w") as out:
+        out.write("""
+        try
+          casadi.MX;
+        catch
+          error('This block depends on CasADi. Obtain it from install.casadi.org and make sure to have the casadi directory added to the matlab path.');
+        end
+
+        """)
+        out.write(f"""
+          s_function_file_name_base = '{s_function_file_name_base}';
+          c_file_name_base = '{c_file_name_base}';
+          casadi_codegen_file_name_base = '{casadi_codegen_file_name_base}';
+          [build_dir,~,~] = fileparts(mfilename('fullpath'));
+          flags={{['-I' build_dir] ['-L' build_dir] '-DCASADI_PRINTF=mexPrintf' ['-I' casadi.GlobalOptions.getCasadiIncludePath()] ['-L' casadi.GlobalOptions.getCasadiPath()]}};
+          files = {{[build_dir filesep s_function_file_name_base], [build_dir filesep c_file_name_base]}};
+          """)
+        for e in artifacts:
+          if isinstance(e, HeaderDirectory):
+            out.write(f"""           flags = [flags {{['-I' build_dir filesep '{e.dir}']}}];\n""")
+          if isinstance(e, LibraryArtifact):
+            out.write(f"""           flags = [flags {{['-l{e.basename}']}}];\n""")
+        for e in artifacts:
+          if isinstance(e, SourceArtifact):
+            out.write(f"""           files = [files {{[build_dir filesep '{e.relative}']}}];\n""")
+        if use_codegen:
+
+          ipopt = ''
+          if modern_casadi():
+            ipopt = "'-lipopt' '-lfatrop' '-lblasfeo'"
+          out.write(f"""
+            files=[files {{ [build_dir filesep casadi_codegen_file_name_base]}}];
+            flags=[flags {{['-I' casadi.GlobalOptions.getCasadiIncludePath()] ['-I' casadi.GlobalOptions.getCasadiPath()] '-losqp' {ipopt}}}];
+            """)
+        else:
+          out.write(f"""
+            flags=[flags {{'-lcasadi'}}];
+            """)
+        out.write(f"""
+        if ispc
+        else
+          flags=[flags {{'-g' ['LDFLAGS=\"\$LDFLAGS -Wl,-rpath,' casadi.GlobalOptions.getCasadiPath() ' -Wl,-rpath,' build_dir '\"']}}];
+        end
+        mex(flags{{:}},files{{:}});\n""")
+        for f_name in added_functions:
+          out.write(f"mex(flags{{:}}, [build_dir filesep '{f_name}']);\n")
 
     shutil.copy(os.path.join(self.basename,"templates","python","impact.py"), os.path.join(build_dir_abs,"impact.py"))
     py_file_name = os.path.join(build_dir_abs,"hello_world_" + name+".py")
