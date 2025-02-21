@@ -3425,9 +3425,9 @@ plt.show()
         cmake_minimum_required(VERSION 3.0.0)
         project({name} VERSION 0.1.0)
 
-        message("If you get a complaint about missing libcasadi.lib, please copy the casadi.lib file to libcasadi.lib")
-        set(CMAKE_PREFIX_PATH "{escape(casadi.GlobalOptions.getCasadiPath())}" ${{CMAKE_PREFIX_PATH}})
-        find_package(casadi REQUIRED)
+        #message("If you get a complaint about missing libcasadi.lib, please copy the casadi.lib file to libcasadi.lib")
+        #set(CMAKE_PREFIX_PATH "{escape(casadi.GlobalOptions.getCasadiPath())}" ${{CMAKE_PREFIX_PATH}})
+        #find_package(casadi REQUIRED)
 
         set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
         set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
@@ -3436,9 +3436,7 @@ plt.show()
           set(CMAKE_INSTALL_RPATH "@loader_path/;@loader_path/lib/")
         else()
           set(CMAKE_INSTALL_RPATH "$ORIGIN;$ORIGIN/lib")
-        endif()
-
-        add_library({name}_codegen SHARED {format_files_or_dirs(source_files, build_dir_abs,target="cmake")})""")
+        endif()""")
 
       include_dirs = [GlobalOptions.getCasadiIncludePath()]
       for e in artifacts:
@@ -3451,6 +3449,8 @@ plt.show()
           for l in f.readlines():
             if "osqp" in l:
               libraries.add("osqp")
+            if "highs" in l:
+              libraries.add("highs")
             if "fatrop" in l:
               libraries.add("fatrop")
               libraries.add("blasfeo")
@@ -3467,29 +3467,53 @@ plt.show()
 
       link_dirs = [GlobalOptions.getCasadiPath(),build_dir_abs]
 
-      out.write(f"""
-      
-        target_include_directories({name}_codegen PRIVATE {format_files_or_dirs(include_dirs, build_dir_abs,target="cmake")})
-        target_link_directories({name}_codegen PUBLIC {format_files_or_dirs(link_dirs, build_dir_abs,target="cmake")})
-        target_include_directories({name}_codegen PUBLIC {format_files_or_dirs(build_dir_abs, build_dir_abs,target="cmake")})
-
-        target_link_libraries({name}_codegen PRIVATE {" ".join(libraries)})
+      if use_codegen:
+        out.write(f"""
+                  
+          add_library({name}_codegen SHARED {format_files_or_dirs(source_files, build_dir_abs,target="cmake")})
         
-        add_library({name} SHARED {name}.c)
-        target_link_libraries({name} {name}_codegen)
+          target_include_directories({name}_codegen PRIVATE {format_files_or_dirs(include_dirs, build_dir_abs,target="cmake")})
+          target_link_directories({name}_codegen PUBLIC {format_files_or_dirs(link_dirs, build_dir_abs,target="cmake")})
+          target_include_directories({name}_codegen PUBLIC {format_files_or_dirs(build_dir_abs, build_dir_abs,target="cmake")})
+
+          target_link_libraries({name}_codegen PRIVATE {" ".join(libraries)})
+          
+          add_library({name} SHARED {name}.c)
+          target_link_libraries({name} {name}_codegen)
 
 
-        #add_executable({hello_file_name_base} {format_files_or_dirs(hello_c_file_name, build_dir_abs,target="cmake")})
-        #target_link_libraries({hello_file_name_base} {name})
+          #add_executable({hello_file_name_base} {format_files_or_dirs(hello_c_file_name, build_dir_abs,target="cmake")})
+          #target_link_libraries({hello_file_name_base} {name})
 
-        INSTALL(TARGETS {name} {name}_codegen
-        LIBRARY DESTINATION .
-        ARCHIVE DESTINATION .
-        INCLUDES DESTINATION .
-        RUNTIME DESTINATION .
-        )
+          INSTALL(TARGETS {name} {name}_codegen
+          LIBRARY DESTINATION .
+          ARCHIVE DESTINATION .
+          INCLUDES DESTINATION .
+          RUNTIME DESTINATION .
+          )
+          
+        """)
+
+      else:
+        out.write(f"""
+          add_library({name} SHARED {name}.c)
         
-      """)
+          target_include_directories({name} PRIVATE {format_files_or_dirs(include_dirs, build_dir_abs,target="cmake")})
+          target_link_directories({name} PUBLIC {format_files_or_dirs(link_dirs, build_dir_abs,target="cmake")})
+          target_include_directories({name} PUBLIC {format_files_or_dirs(build_dir_abs, build_dir_abs,target="cmake")})
+          target_link_libraries({name} PRIVATE {" ".join(libraries)})
+
+          #add_executable({hello_file_name_base} {format_files_or_dirs(hello_c_file_name, build_dir_abs,target="cmake")})
+          #target_link_libraries({hello_file_name_base} {name})
+
+          INSTALL(TARGETS {name}
+          LIBRARY DESTINATION .
+          ARCHIVE DESTINATION .
+          INCLUDES DESTINATION .
+          RUNTIME DESTINATION .
+          )
+          
+        """)
 
     import subprocess
     assert subprocess.run(["cmake","-S", "."] + cmake_flags+["-B", "build"], cwd=build_dir_abs).returncode==0
