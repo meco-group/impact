@@ -3401,11 +3401,12 @@ plt.show()
       cmake_flags = []
 
     def cmake_path(e,build_dir_abs):
-      print(e)
-      print(build_dir_abs)
-      print(os.path.commonpath([e,build_dir_abs]),"check")
+      try:
+        use_relative = os.path.commonpath([e,build_dir_abs])==build_dir_abs
+      except:
+        use_relative = False
 
-      if os.path.commonpath([e,build_dir_abs])==build_dir_abs:
+      if use_relative:
         if os.path.relpath(e,build_dir_abs)==".":
           return "${CMAKE_CURRENT_SOURCE_DIR}"
         else:
@@ -3453,6 +3454,8 @@ plt.show()
             if "fatrop" in l:
               libraries.add("fatrop")
               libraries.add("blasfeo")
+            if "ipopt" in l:
+              libraries.add("ipopt")
       else:
         libraries.add("casadi")
 
