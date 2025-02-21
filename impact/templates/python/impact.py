@@ -6,6 +6,7 @@ import platform
 try:
     import casadi
     os.environ["PATH"] += os.pathsep + casadi.GlobalOptions.getCasadiPath()
+    os.add_dll_directory(casadi.GlobalOptions.getCasadiPath())
 except:
     pass
 
