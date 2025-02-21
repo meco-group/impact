@@ -2859,18 +2859,18 @@ int {prefix}flag_value({prefix}struct* m, int index);
           addIncludePaths(objBuildinfo,['$(START_DIR)' filesep '{e.dir}'])
           """)
       out.write(f"""
-      addDefines(myBuildInfo,'-DLA_HIGH_PERFORMANCE=ON','OPTS');
-      addDefines(myBuildInfo,'-DBLASFEO_REF_API=ON','OPTS');
-      addDefines(myBuildInfo,'-DMF_PANELMAJ=ON','OPTS');  
-      addDefines(myBuildInfo,'-DK_MAX_STACK=300','OPTS');       
-      addDefines(myBuildInfo,'-DUSE_C99_MATH=ON','OPTS');
-      addDefines(myBuildInfo,'-DEXT_DEP=ON','OPTS');
-      addDefines(myBuildInfo,'-DOS_LINUX=ON','OPTS');
-      addDefines(myBuildInfo,'-DEXTERNAL_BLAS_NONE=ON','OPTS');
-      addDefines(myBuildInfo,'-DTARGET_X64_INTEL_CORE=ON','OPTS');
-      addDefines(myBuildInfo,'-DRELEASE=ON','OPTS');
-      addDefines(myBuildInfo,'-DLEVEL1_DCACHE_LINE_SIZE=','OPTS');
-      addDefines(myBuildInfo,'-DPANEL_SIZE=','OPTS');    
+      addDefines(objBuildinfo,'-DLA_HIGH_PERFORMANCE=ON','OPTS');
+      addDefines(objBuildinfo,'-DBLASFEO_REF_API=ON','OPTS');
+      addDefines(objBuildinfo,'-DMF_PANELMAJ=ON','OPTS');  
+      addDefines(objBuildinfo,'-DK_MAX_STACK=300','OPTS');       
+      addDefines(objBuildinfo,'-DUSE_C99_MATH=ON','OPTS');
+      addDefines(objBuildinfo,'-DEXT_DEP=ON','OPTS');
+      addDefines(objBuildinfo,'-DOS_LINUX=ON','OPTS');
+      addDefines(objBuildinfo,'-DEXTERNAL_BLAS_NONE=ON','OPTS');
+      addDefines(objBuildinfo,'-DTARGET_X64_INTEL_CORE=ON','OPTS');
+      addDefines(objBuildinfo,'-DRELEASE=ON','OPTS');
+      addDefines(objBuildinfo,'-DLEVEL1_DCACHE_LINE_SIZE=','OPTS');
+      addDefines(objBuildinfo,'-DPANEL_SIZE=','OPTS');    
       """)
                 
       out.write("end")

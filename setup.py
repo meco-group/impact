@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 import glob
 import os
 
-version = "0.4.0"
+version = "0.4.1"
 
 print(find_packages(exclude=['tests', 'examples']))
 
