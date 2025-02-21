@@ -3394,11 +3394,109 @@ plt.show()
     for e in artifacts:
       e.copy_to_build_dir(build_dir_abs)
 
+    import rockit
+    try:
+      cmake_flags = rockit.GlobalOptions.get_cmake_flags()
+    except:
+      cmake_flags = []
+
+    def cmake_path(e,build_dir_abs):
+      print(e)
+      print(build_dir_abs)
+      print(os.path.commonpath([e,build_dir_abs]),"check")
+
+      if os.path.commonpath([e,build_dir_abs])==build_dir_abs:
+        if os.path.relpath(e,build_dir_abs)==".":
+          return "${CMAKE_CURRENT_SOURCE_DIR}"
+        else:
+          return "${CMAKE_CURRENT_SOURCE_DIR}/"+os.path.relpath(e,build_dir_abs)
+      return e
+    
+    def format_files_or_dirs(v,build_dir_abs,target="cmake"):
+      if not isinstance(v,list):
+        return format_files_or_dirs([v],build_dir_abs,target)
+      return  " ".join([f"\"{escape(cmake_path(e, build_dir_abs))}\"" for e in v])
+
+  
+    cmake_file_name = os.path.join(build_dir_abs,"CMakeLists.txt")
+    with open(cmake_file_name,"w") as out:
+      out.write(f"""
+        cmake_minimum_required(VERSION 3.0.0)
+        project({name} VERSION 0.1.0)
+
+        message("If you get a complaint about missing libcasadi.lib, please copy the casadi.lib file to libcasadi.lib")
+        set(CMAKE_PREFIX_PATH "{escape(casadi.GlobalOptions.getCasadiPath())}" ${{CMAKE_PREFIX_PATH}})
+        find_package(casadi REQUIRED)
+
+        set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+        set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+        if(APPLE)
+          set(CMAKE_MACOSX_RPATH ON)
+          set(CMAKE_INSTALL_RPATH "@loader_path/;@loader_path/lib/")
+        else()
+          set(CMAKE_INSTALL_RPATH "$ORIGIN;$ORIGIN/lib")
+        endif()
+
+        add_library({name}_codegen SHARED {format_files_or_dirs(source_files, build_dir_abs,target="cmake")})""")
+
+      include_dirs = [GlobalOptions.getCasadiIncludePath()]
+      for e in artifacts:
+        if isinstance(e, HeaderDirectory):
+          include_dirs.append(e.resolve_dir(build_dir_abs))
+
+      libraries = set()
+      if use_codegen:
+        with open(casadi_codegen_file_name,"r") as f:
+          for l in f.readlines():
+            if "osqp" in l:
+              libraries.add("osqp")
+            if "fatrop" in l:
+              libraries.add("fatrop")
+              libraries.add("blasfeo")
+      else:
+        libraries.add("casadi")
+
+      for e in artifacts:
+        if isinstance(e, LibraryArtifact):
+          libraries.add(e.basename)
+
+      libraries = sorted(list(libraries))
+
+      link_dirs = [GlobalOptions.getCasadiPath(),build_dir_abs]
+
+      out.write(f"""
       
+        target_include_directories({name}_codegen PRIVATE {format_files_or_dirs(include_dirs, build_dir_abs,target="cmake")})
+        target_link_directories({name}_codegen PUBLIC {format_files_or_dirs(link_dirs, build_dir_abs,target="cmake")})
+        target_include_directories({name}_codegen PUBLIC {format_files_or_dirs(build_dir_abs, build_dir_abs,target="cmake")})
+
+        target_link_libraries({name}_codegen PRIVATE {" ".join(libraries)})
+        
+        add_library({name} SHARED {name}.c)
+        target_link_libraries({name} {name}_codegen)
+
+
+        #add_executable({hello_file_name_base} {format_files_or_dirs(hello_c_file_name, build_dir_abs,target="cmake")})
+        #target_link_libraries({hello_file_name_base} {name})
+
+        INSTALL(TARGETS {name} {name}_codegen
+        LIBRARY DESTINATION .
+        ARCHIVE DESTINATION .
+        INCLUDES DESTINATION .
+        RUNTIME DESTINATION .
+        )
+        
+      """)
+
+    import subprocess
+    assert subprocess.run(["cmake","-S", "."] + cmake_flags+["-B", "build"], cwd=build_dir_abs).returncode==0
+    assert subprocess.run(["cmake","--build","build","--config","Debug","--verbose"], cwd=build_dir_abs).returncode==0
+    assert subprocess.run(["cmake","--install","build","--prefix","."], cwd=build_dir_abs).returncode==0
+  
     with open(make_file_name,"w") as out:
 
       flags = ["-pedantic","-Wall","-Wextra","-Wno-unknown-pragmas","-Wno-long-long","-Wno-unused-parameter","-Wno-unused-const-variable","-Wno-sign-compare","-Wno-unused-but-set-variable","-Wno-unused-variable","-Wno-endif-labels"]
-      deps = ["-I"+build_dir_abs,"-L"+build_dir_abs,"-Wl,-rpath="+build_dir_abs,"-L"+GlobalOptions.getCasadiPath(),"-I"+GlobalOptions.getCasadiIncludePath(),"-Wl,-rpath="+GlobalOptions.getCasadiPath()]
+      deps = ["-I"+build_dir_abs,"-L"+build_dir_abs,"-Wl,-rpath,"+build_dir_abs,"-L"+GlobalOptions.getCasadiPath(),"-I"+GlobalOptions.getCasadiIncludePath(),"-Wl,-rpath,"+GlobalOptions.getCasadiPath()]
       for e in artifacts:
         if isinstance(e, HeaderDirectory):
           deps+=e.get_flags(build_dir_abs)
@@ -3406,7 +3504,7 @@ plt.show()
 
       if use_codegen:
         lib_codegen_file_name = os.path.join(build_dir_abs,"lib" + name + "_codegen.so")
-        lib_codegen_compile_commands = ["gcc"]+c_flags+["-fPIC","-shared"]+source_files+ ["-lm","-o"+lib_codegen_file_name]+deps
+        #lib_codegen_compile_commands = [compiler]+c_flags+["-fPIC","-shared"]+source_files+ ["-lm","-o"+lib_codegen_file_name]+deps
         deps += ["-l"+name+"_codegen","-losqp"]
 
         if modern_casadi():
@@ -3423,11 +3521,11 @@ plt.show()
       for e in artifacts:
         if isinstance(e, LibraryArtifact):
           deps += ["-l" + e.basename]
-      lib_compile_commands = ["gcc"]+c_flags+["-fPIC","-shared",c_file_name,"-o"+lib_file_name]+deps+flags
+      #lib_compile_commands = [compiler]+c_flags+["-fPIC","-shared",c_file_name,"-o"+lib_file_name]+deps+flags
 
-      hello_compile_commands = ["gcc"]+c_flags+[hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-o",hello_file_name]+deps+flags
+      #hello_compile_commands = [compiler]+c_flags+[hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-o",hello_file_name]+deps+flags
 
-      if os.name!="nt":
+      if False:
         print("Compiling")
         import subprocess
         if use_codegen:
@@ -3446,7 +3544,7 @@ plt.show()
           if p.returncode!=0:
             raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
 
-      print(hello_compile_commands)
+      """print(hello_compile_commands)
       if use_codegen:
         out.write(os.path.basename(lib_codegen_file_name) + ": " + " ".join([os.path.basename(e) for e in source_files]) + "\n")
         out.write("\t"+" ".join(lib_codegen_compile_commands)+"\n\n")
@@ -3455,27 +3553,8 @@ plt.show()
       out.write("\t"+" ".join(lib_compile_commands)+"\n\n")
 
       out.write(os.path.basename(hello_file_name) + ": " + os.path.basename(hello_c_file_name) + "\n")
-      out.write("\t"+" ".join(hello_compile_commands)+"\n\n")
+      out.write("\t"+" ".join(hello_compile_commands)+"\n\n")"""
 
-    cmake_file_name = os.path.join(build_dir_abs,"CMakeLists.txt")
-    with open(cmake_file_name,"w") as out:
-      out.write(f"""
-      project({name})
-
-      set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
-
-      cmake_minimum_required(VERSION 3.0)
-
-      message("If you get a complaint about missing libcasadi.lib, please copy the casadi.lib file to libcasadi.lib")
-      set(CMAKE_PREFIX_PATH "{escape(casadi.GlobalOptions.getCasadiPath())}" ${{CMAKE_PREFIX_PATH}})
-      find_package(casadi REQUIRED)
-
-      add_library({name} SHARED {name}.c)
-      target_link_libraries({name} casadi)
-
-      install(TARGETS {name} RUNTIME DESTINATION . LIBRARY DESTINATION .)
-
-      """)
     cmake_file_name = os.path.join(build_dir_abs,"build.bat")
     with open(cmake_file_name,"w") as out:
       out.write(f"""
