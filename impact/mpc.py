@@ -2858,7 +2858,9 @@ int {prefix}flag_value({prefix}struct* m, int index);
           out.write(f"""
           addIncludePaths(objBuildinfo,['$(START_DIR)' filesep '{e.dir}'])
           """)
+
       out.write(f"""
+      addIncludePaths(objBuildinfo,casadi.GlobalOptions.getCasadiIncludePath());
       addDefines(objBuildinfo,'-DLA_HIGH_PERFORMANCE=ON','OPTS');
       addDefines(objBuildinfo,'-DBLASFEO_REF_API=ON','OPTS');
       addDefines(objBuildinfo,'-DMF_PANELMAJ=ON','OPTS');  
