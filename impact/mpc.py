@@ -3539,8 +3539,8 @@ plt.show()
         """)
 
     import subprocess
-    assert subprocess.run(["cmake","-S", "."] + cmake_flags+["-B", "build"], cwd=build_dir_abs).returncode==0
-    assert subprocess.run(["cmake","--build","build","--config","Debug","--verbose"], cwd=build_dir_abs).returncode==0
+    assert subprocess.run(["cmake","-S", "."] + cmake_flags+["-DCMAKE_BUILD_TYPE="+rockit.GlobalOptions.get_cmake_build_type(),"-B", "build"], cwd=build_dir_abs).returncode==0
+    assert subprocess.run(["cmake","--build","build","--config",rockit.GlobalOptions.get_cmake_build_type(),"--verbose"], cwd=build_dir_abs).returncode==0
     assert subprocess.run(["cmake","--install","build","--prefix","."], cwd=build_dir_abs).returncode==0
   
     with open(make_file_name,"w") as out:
