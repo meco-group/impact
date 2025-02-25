@@ -1369,9 +1369,10 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
           alg_ordered.append(eval(e,casadi.__dict__,locals))
         model_res["alg"] = vvcat(alg_ordered)
 
-
-
-      model_res["ode"] = casadi.cse(model_res["ode"])
+      keys = model_res.keys()
+      res = casadi.cse([model_res[k] for k in keys])
+      for k,v in zip(keys,res):
+        model_res[k] = v
 
     ode = MX(0,1)
     alg = MX(0,1)
