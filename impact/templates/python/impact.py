@@ -10,6 +10,16 @@ try:
 except:
     pass
 
+class STATS(Structure):
+    _fields_ = [("sqp_stop_crit", c_int),
+                ("n_sqp_iter", c_int),
+                ("n_ls", c_int),
+                ("n_max_ls", c_int),
+                ("n_qp_iter", c_int),
+                ("n_max_qp_iter", c_int),
+                ("runtime", c_double)
+                ]
+
 class Impact:
     def _register(self,fun_name,argtypes,restype):
         fun = getattr(self.lib,self.prefix+fun_name)
@@ -55,6 +65,8 @@ class Impact:
         self._register("flag_size",[m_type], c_int)
         self._register("flag_name",[m_type, c_int], c_char_p)
         self._register("flag_value",[m_type, c_int], c_int)
+        self._register("get_stats",[m_type], POINTER(CONST(STATS)))
+
 
         self._m = self._initialize(self._formatter, build_dir_abs.encode("ascii"))
         """
@@ -108,6 +120,9 @@ class Impact:
 
     def hotstart(self):
         self._hotstart(self._m)
+
+    def get_stats(self):
+        return self._get_stats(self._m).contents
 
     def __del__(self):
         if hasattr(self, "_m"):
