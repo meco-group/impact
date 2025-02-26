@@ -2852,12 +2852,16 @@ int {prefix}flag_value({prefix}struct* m, int index);
       """)
       for e in artifacts:
         if isinstance(e, SourceArtifact):
+          if e.reldir=="":
+            reldir = "$(START_DIR)"
+          else:
+            reldir = f'$(START_DIR)/{e.reldir}'
           out.write(f"""
-          addSourceFiles(objBuildinfo,'{e.relative}','$(START_DIR)');
+          addSourceFiles(objBuildinfo,'{e.name}','{reldir}');
           """)
         if isinstance(e, HeaderDirectory):
           out.write(f"""
-          addIncludePaths(objBuildinfo,['$(START_DIR)' filesep '{e.dir}'])
+          addIncludePaths(objBuildinfo,['$(START_DIR)/{e.dir}'])
           """)
 
       out.write(f"""
