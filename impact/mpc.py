@@ -1241,7 +1241,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
 
         dae = DaeBuilder(name, unzipped_path)
 
-        model = dae.create('f', ['x', 'u', 'p'], ['ode','ydef'],{"new_forward":False})
+        model = dae.create('f', ['x', 'u', 'p'], ['ode','y'],{"new_forward":False})
       else:
         raise Exception("Unknown external type: %s" % external["type"])
       # Make sure the CasADi Function adheres to a standard
@@ -1302,8 +1302,8 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
     
 
     if model:
-      if "ydef" in model.name_out():
-        var_len = model.numel_out("ydef")
+      if "y" in model.name_out():
+        var_len = model.numel_out("y")
       else:
         var_len = 0
       if var_len>0:
@@ -1349,7 +1349,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
           output = eval(outputs[local_name],casadi.__dict__,locals)
           outputs_ordered.append(output)
           locals[local_name] = output
-        model_res["ydef"] = vvcat(outputs_ordered)
+        model_res["y"] = vvcat(outputs_ordered)
         assert len(names["y"])==len(outputs)
 
       if "ode" in inline:
@@ -1384,8 +1384,8 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
       assert "alg" in model_res
       self.add_alg(model_res["alg"])
 
-    if "ydef" in model_res:
-      m._register("y",dict(zip(names["y"],vertsplit(model_res["ydef"]))))
+    if "y" in model_res:
+      m._register("y",dict(zip(names["y"],vertsplit(model_res["y"]))))
     m._update({"ode": ode, "alg": alg},allow_keyword=True)
     return m
 
