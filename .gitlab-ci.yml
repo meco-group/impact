@@ -23,6 +23,7 @@ docs:
       - docs/build
   only:
     - main
+    - Documentation
 
 pages:
   stage: publish
