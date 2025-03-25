@@ -39,3 +39,4 @@ pages:
       - public
   only:
     - main
+    - Documentation
