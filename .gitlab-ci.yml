@@ -23,7 +23,6 @@ docs:
       - docs/build
   only:
     - main
-    - Documentation
 
 pages:
   stage: publish
@@ -39,4 +38,3 @@ pages:
       - public
   only:
     - main
-    - Documentation
