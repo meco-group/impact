@@ -11,13 +11,14 @@ function [] = export_simulink_model(mdl, export_filename)
     cs.set_param('Solver', 'ode4');
 
     exportToFMU(mdl,'FMIVersion','2.0','FMUType','ME','SaveSourceCodeToFMU','on','SupportMultiInstance','on', 'SaveDirectory',pwd);
-    unzipped_path = [mdl '_unzipped'];
 
-    %if exist(unzipped_path)
-    %    rmdir(unzipped_path, 's');
-    %end
-
-    unzip([mdl '.fmu'],unzipped_path)
+    try
+        r = casadi.Resource('dog_clutch.fmu');
+        unzipped_path = r.path;
+    catch
+        unzipped_path = [mdl '_unzipped'];
+        unzip([mdl '.fmu'],unzipped_path);
+    end
 
     dae = casadi.DaeBuilder(mdl, unzipped_path)
 
@@ -94,4 +95,7 @@ function [] = export_simulink_model(mdl, export_filename)
         end
     end
     fclose(fid);
+
+    dae = 0;
+    r = 0;
 end
