@@ -20,6 +20,10 @@ classdef DirectCollocation < rockit.DirectMethod
         obj.parent = py.impact.DirectCollocation(args{:},pyargs(kwargs{:}));
       end
     end
+    function [] = delete(obj)
+      obj.parent = 0;
+      py.gc.collect();
+    end
     function varargout = clean(obj,varargin)
       global pythoncasadiinterface
       [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,0,{});

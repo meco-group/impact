@@ -32,6 +32,10 @@ classdef MPC < rockit.Ocp & rockit.Stage
         obj.parent = py.impact.MPC(args{:},pyargs(kwargs{:}));
       end
     end
+    function [] = delete(obj)
+      obj.parent = 0;
+      py.gc.collect();
+    end
     function varargout = control(obj,varargin)
       % Defines control variable
       % Arguments: args, kwargs
@@ -105,7 +109,7 @@ classdef MPC < rockit.Ocp & rockit.Stage
     end
     function varargout = add_model(obj,varargin)
       % Creates a model based on a yaml file
-      % Arguments: name, file_name
+      % Arguments: name, file_name, mode=normal
       % 
       %         :param name: Name of the model
       %         :type name: string
@@ -113,12 +117,15 @@ classdef MPC < rockit.Ocp & rockit.Stage
       %         :param file_name: Path to the yaml file
       %         :type name: string
       % 
+      %         :param mode: normal or sys_id - in sys_id, parameters are promoted to variables and controls become parameters
+      %         :type mode: string
+      % 
       %         :return: model
       %         :rtype: Model
       % 
       %     
       global pythoncasadiinterface
-      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,2,{'name','file_name'});
+      [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,2,{'name','file_name','mode'});
       if isempty(kwargs)
         res = obj.parent.add_model(args{:});
       else
@@ -233,6 +240,9 @@ classdef MPC < rockit.Ocp & rockit.Stage
   methods(Static)
     function varargout = patch_codegen(varargin)
       global pythoncasadiinterface
+      if isempty(pythoncasadiinterface)
+        pythoncasadiinterface = impact.PythonCasadiInterface;
+      end
       [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,1,{'name','ocp','qp_error_on_fail'});
       if isempty(kwargs)
         res = py.impact.mpc.MPC.patch_codegen(args{:});
@@ -243,6 +253,9 @@ classdef MPC < rockit.Ocp & rockit.Stage
     end
     function varargout = load(varargin)
       global pythoncasadiinterface
+      if isempty(pythoncasadiinterface)
+        pythoncasadiinterface = impact.PythonCasadiInterface;
+      end
       [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,0,{'name'});
       if isempty(kwargs)
         res = py.impact.mpc.MPC.load(args{:});

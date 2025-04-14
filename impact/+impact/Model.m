@@ -21,5 +21,9 @@ classdef Model < impact.DotDict
         obj.parent = py.impact.Model(args{:},pyargs(kwargs{:}));
       end
     end
+    function [] = delete(obj)
+      obj.parent = 0;
+      py.gc.collect();
+    end
   end
 end

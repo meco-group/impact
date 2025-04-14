@@ -21,6 +21,10 @@ classdef DotDict < handle
         obj.parent = py.impact.DotDict(args{:},pyargs(kwargs{:}));
       end
     end
+    function [] = delete(obj)
+      obj.parent = 0;
+      py.gc.collect();
+    end
     function varargout = subsref(obj,S)
       if ~strcmp(S(1).type,'.')
         [varargout{1:nargout}] = builtin('subsref',obj,S);

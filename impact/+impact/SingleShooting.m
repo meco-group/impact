@@ -20,6 +20,10 @@ classdef SingleShooting < rockit.DirectMethod
         obj.parent = py.impact.SingleShooting(args{:},pyargs(kwargs{:}));
       end
     end
+    function [] = delete(obj)
+      obj.parent = 0;
+      py.gc.collect();
+    end
     function varargout = add_parameter(obj,varargin)
       global pythoncasadiinterface
       [args,kwargs] = pythoncasadiinterface.matlab2python_arg(varargin,2,{'stage','opti'});

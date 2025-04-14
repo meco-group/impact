@@ -1231,15 +1231,16 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
       if external["type"]=="casadi_serialized":
         model = Function.load(model_file_name)
       elif external["type"]=="fmu":
-        unzipped_path = name+"_unzipped"
-
-        import shutil
-        #if os.path.isdir(unzipped_path): shutil.rmtree(unzipped_path)  
-        # Unzip
-        import zipfile
-        #with zipfile.ZipFile(model_file_name, 'r') as zip_ref: zip_ref.extractall(unzipped_path)
-
-        dae = DaeBuilder(name, unzipped_path)
+        try:
+          dae = DaeBuilder(name, name+'.fmu')
+        except:
+          unzipped_path = name+"_unzipped"
+          import shutil
+          #if os.path.isdir(unzipped_path): shutil.rmtree(unzipped_path)  
+          # Unzip
+          import zipfile
+          #with zipfile.ZipFile(model_file_name, 'r') as zip_ref: zip_ref.extractall(unzipped_path)
+          dae = DaeBuilder(name, unzipped_path)
 
         model = dae.create('f', ['x', 'u', 'p'], ['ode','y'],{"new_forward":False})
       else:
