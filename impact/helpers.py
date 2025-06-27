@@ -1,5 +1,5 @@
 import os
-
+import re
 
 
 def simulink_parse_states(mdl,unzipped_path):
@@ -48,7 +48,8 @@ def simulink_parse_states(mdl,unzipped_path):
     simscape_ids = []
 
     with open(os.path.join(unzipped_path,'sources',mdl+'.c'),'r') as inp:
-        for line in inp:
+        new_content = re.sub(r'(?<![;{])\n', '', inp.read())
+        for line in new_content.splitlines():
             line = line.strip()
             if "_gateway(" in line:
                 active_simscape = line[:line.index("(")].rstrip()
@@ -56,7 +57,10 @@ def simulink_parse_states(mdl,unzipped_path):
                     simscape_ids.append(active_simscape[:-len("_gateway")])
             if "simulationData->mData->mContStates.mX" in line and "NULL" not in line:
                 n = int(prev_line.split("=")[1][:-1])
-                name = line.split("->")[-1].split("[")[0]
+                name = line.split("->")[-1].strip()[:-1]
+                if "[" in name:
+                    name = name.split("[")[0]
+                name = name.strip()
                 if (name,n) not in simscape_states:
                     simscape_states.append((name,n))
             prev_line = line
@@ -70,10 +74,9 @@ def simulink_parse_states(mdl,unzipped_path):
         assert len(names)==simscape_states[k][1]
         simscape_state[simscape_states[k][0]] = names
 
-    print(simscape_state)
-
     with open(os.path.join(unzipped_path,'sources',mdl+'.h'),'r') as inp:
-        for line in inp:
+        new_content = re.sub(r'(?<![;{])\n', '', inp.read())
+        for line in new_content.splitlines():
             line = line.strip()
             if "typedef struct" in line:
                 typedef_staging = []
@@ -84,7 +87,7 @@ def simulink_parse_states(mdl,unzipped_path):
                         typedef_staging = None
                     else:
                         line = line[:-1]
-                        [t,name] = line.split(" ")
+                        [t,name] = re.split(r'\s+', line)
                         typedef_staging.append((t,name))
     
     states = typedefs[state_class]
@@ -93,6 +96,8 @@ def simulink_parse_states(mdl,unzipped_path):
         assert e[0]=='real_T'
 
     states = [e[1] for e in states]
+
+
 
     all_states = []
     for e in states:
