@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 import glob
 import os
 
-version = "0.4.10"
+version = "0.5.0"
 
 print(find_packages(exclude=['tests', 'examples']))
 
@@ -22,7 +22,7 @@ setup(
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     install_requires=[
-        'casadi>=3.5,<4.0',
+        'casadi>=3.7.2,<4.0',
         'pyyaml',
         'lxml',
         'rockit-meco>=0.6.2',
