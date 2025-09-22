@@ -1232,7 +1232,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
         model = Function.load(model_file_name)
       elif external["type"]=="fmu":
         try:
-          dae = DaeBuilder(name, name+'.fmu')
+          dae = DaeBuilder(name, model_file_name)
         except:
           unzipped_path = name+"_unzipped"
           import shutil
@@ -1242,7 +1242,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
           #with zipfile.ZipFile(model_file_name, 'r') as zip_ref: zip_ref.extractall(unzipped_path)
           dae = DaeBuilder(name, unzipped_path)
 
-        model = dae.create('f', ['x', 'u', 'p'], ['ode','y'],{"new_forward":False})
+        model = dae.create('f', ['x', 'u', 'p'], ['ode','y'])
       else:
         raise Exception("Unknown external type: %s" % external["type"])
       # Make sure the CasADi Function adheres to a standard
