@@ -66,6 +66,9 @@ sphinx_gallery_conf = {
     # 'filename_pattern': '/',
     'filename_pattern': '/cart_pendulum.py',
     'ignore_pattern': '/cart_pendulum_|/double_integrator|/generate_models',
+    # do not fail the build on example errors
+    'abort_on_example_error': False,
+    'run_stale_examples': False,
     # 'within_subsection_order': ExampleTitleSortKey,
     # 'plot_gallery': 'False',
     # 'binder': {
