@@ -50,4 +50,4 @@ This has the advantage of just installing a link to the site-packages folder ins
 
 ## Submitting an issue
 
-Please submit an issue if you want to report a bug or propose new features.
+Please submit an issue if you want to report a bug or propose new features of the toolchain.
