@@ -29,6 +29,12 @@ Table of contents
   tutorial/getting_started
 
 .. toctree::
+  :caption: Configuration options
+  :maxdepth: 1
+
+  tutorial/configuration
+
+.. toctree::
   :caption: Generated artifacts
   :maxdepth: 1
 

@@ -1,5 +1,6 @@
 # Directories
 __pycache__/
+impact_meco.egg-info/
 impact.egg-info/
 docs/build/
 docs/apidoc/
