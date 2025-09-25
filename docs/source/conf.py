@@ -60,25 +60,23 @@ autodoc_default_options = {
 
 # from sphinx_gallery.sorting import ExampleTitleSortKey
 
+# Sphinx-Gallery configuration
 sphinx_gallery_conf = {
-    'examples_dirs': '../../examples',   # path to your example scripts
-    'gallery_dirs': 'examples',  # path where to save gallery generated examples
-    # 'filename_pattern': '/',
-    'filename_pattern': '/cart_pendulum.py',
-    'ignore_pattern': '/cart_pendulum_|/double_integrator|/generate_models',
-    # do not fail the build on example errors
+    'examples_dirs': '../../examples',
+    'gallery_dirs': 'examples',
+    # defaults for local builds
+    'filename_pattern': r'/cart_pendulum.py',
+    'ignore_pattern': r'/cart_pendulum_|/double_integrator|/generate_models',
     'abort_on_example_error': False,
     'run_stale_examples': False,
-    # 'within_subsection_order': ExampleTitleSortKey,
-    # 'plot_gallery': 'False',
-    # 'binder': {
-    #   'org': 'meco-software',
-    #   'repo': 'rockit.git', # URL will be fixed in .gitlab-ci.yml
-    #   'branch': 'master',
-    #   'binderhub_url': 'https://mybinder.org',
-    #   'dependencies': ['../../.binder/requirements.txt'],
-    # }
 }
+
+# On CI, don't execute any examples at all
+if os.environ.get('CI') == 'true' or os.environ.get('GITLAB_CI'):
+    sphinx_gallery_conf['filename_pattern'] = r'^$'      # match nothing
+    sphinx_gallery_conf['ignore_pattern'] = r'.*'        # ignore everything
+    sphinx_gallery_conf['abort_on_example_error'] = False
+    sphinx_gallery_conf['run_stale_examples'] = False
 
 
 
