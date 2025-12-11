@@ -19,6 +19,10 @@ from packaging import version
 
 from .dotdict import DotDict, Structure
 from .model import Model
+from .diagram import Diagram
+from .mask import Mask 
+from .helpers import escape, write_struct, write_bus
+from .artifact_ros import ROS2Generator
 
 class Field:
   def __init__(self,name,type):
@@ -35,6 +39,8 @@ def modern_casadi():
     return True
   return version.parse(casadi.__version__)>=version.parse("3.6.5")
 
+CURRENT_CASADI_VERSION = casadi.__version__[:((casadi.__version__).find('-'))] if (casadi.__version__).find('-') != -1 else casadi.__version__
+CURRENT_CASADI_VERSION = version.parse(CURRENT_CASADI_VERSION)
 
 fields = [Field("sqp_stop_crit","int"),
           Field("n_sqp_iter","int"),
@@ -47,161 +53,12 @@ fields = [Field("sqp_stop_crit","int"),
 solver_stats_type = Struct("solver_stats_bus",fields)
 
 solver_stats_c_type = Struct("solver_stats",fields)
-
-def escape(e):
-  return e.replace('\\','/')
   
-def field_type_to_DataType(t):
-  if t=="double":
-    return "double"
-  elif t=="float":
-    return "single"
-  elif t=="int":
-    return "int32"
-
-def field_type_to_matlab_c(t):
-  if t=="double":
-    return "double"
-  elif t=="float":
-    return "float"
-  elif t=="int":
-    return "int32_T"
-
-def field_type_to_c(t):
-  return t
-
-def write_struct(s,target="c"):
-  # #include "tmwtypes.h"
-  ret = ""
-  ret += "typedef struct {\n"
-  conv = field_type_to_c if target=="c" else field_type_to_matlab_c
-  for f in s.fields:
-    ret+= "  " + conv(f.type) + " " + f.name + ";\n"
-  ret += "}" + s.name + ";"
-  return ret
-
-def write_bus(s):
-  ret = f"{s.name} = Simulink.Bus;\n"
-  ret += "elements = {};\n"
-  for f in s.fields:
-    ret+= "e = Simulink.BusElement;\n"
-    ret+= f"e.Name = '{f.name}';\n"
-    ret+= f"e.DataType = '{field_type_to_DataType(f.type)}';\n"
-    ret+= "elements{end+1} = e;\n"
-  ret += f"{s.name}.Elements = [elements{{:}}];"
-  return ret
 
 dae_keys = {"x": "differential_states", "z": "algebraic_states", "p": "parameters", "u": "controls"}
 dae_rockit_normal = {"x": "state", "z": "algebraic", "p": "parameter", "u": "control"}
 dae_rockit_sys_id = {"x": "state", "z": "algebraic", "p": "variable", "u": "parameter"}
 
-
-# keywords = {"x","u","z","p","c","y"}
-# for k in set(keywords):
-#   keywords.add("n"+k)
-# keywords.add("all")
-
-
-# def remove_prefix(n,prefix):
-#   if n.startswith(prefix):
-#     return n[len(prefix):]
-#   else:
-#     n
-
-# class DotDict(object):
-#   """like a dict but access through . """
-#   def __init__(self, d=None):
-#     if d is None:
-#       d = {}
-#     self._d = d
-
-#   def __getattr__(self, k):
-#     try:
-#       return self._d[k]
-#     except:
-#       raise AttributeError()
-  
-#   def _update(self, d, allow_keyword=False):
-#     for k,v in d.items():
-#       if allow_keyword:
-#         if k in self._d:
-#           old = self._d[k]
-#           if isinstance(old,list):
-#             self._d[k]=old+v
-#           else:
-#             self._d[k] = veccat(old,v)
-#         else:
-#           self._d[k] = v
-#       else:
-#         if k in keywords:
-#           raise Exception("'%s' is a reserved keyword. Please use another name." % k)
-#         if k in self._d:
-#           raise Exception("Name collision: '%s' already in use." % k)
-#         self._d[k] = v
-      
-#   def __repr__(self,indent=0):
-#     s = "{\n"
-#     for k,v in sorted(self._d.items()):
-#       s += ("  " * (indent+1)) + k
-#       try:
-#         s += ": " + v.__repr__(indent=indent+1)
-#       except:
-#         if isinstance(v, list):
-#           s+= ": " + str(v)
-#         #s += str(v)
-#         pass
-
-#       s += "\n"
-#     s+=("  " * indent) + "}"
-#     return s
-
-
-# class Structure:
-#   def __init__(self, definition,prefix=""):
-#     if isinstance(definition,MX):
-#       self._symbols = [definition]
-#       self._concat = definition
-#       self._numel = definition
-#       self._names = [definition.name()]
-#     else:
-#       symbols = []
-#       for d in definition:
-#         size = d["size"] if "size" in d else 1
-#         name = d["name"]
-#         symbols.append(MX.sym(prefix+name, size))
-#       self._names = [d["name"] for d in definition]
-#       self._symbols = symbols
-#       self._concat = vcat(symbols)
-#       self._numel = self._concat.numel()
-
-#   def __MX__(self):
-#     return self._concat
-
-
-# class Model(DotDict):
-#   """This should be a description of the Model class."""
-
-#   def __init__(self, prefix=""):
-#     DotDict.__init__(self)
-#     self._prefix = prefix
-#     self.all = DotDict()
-
-#   def _register(self,key,parts):
-#     if isinstance(parts,dict):
-#       for k,v in parts.items():
-#         self._update({k: v})
-#       ks = list(sorted(parts.keys()))
-#       self.all._update({key: [parts[k] for k in ks]},allow_keyword=True)
-#       self._update({key: vvcat([parts[k] for k in ks])},allow_keyword=True)
-#     else:
-#       s = Structure(parts,prefix=self._prefix)
-#       for e in s._symbols:
-#         self._update({remove_prefix(e.name(),self._prefix): e},allow_keyword=isinstance(parts,MX))
-#       self.all._update({key: s._symbols},allow_keyword=True)
-#       if not isinstance(parts,MX):
-#         self._update({key : s._concat},allow_keyword=True)
-#       self._update({'n'+key: s._numel},allow_keyword=True)
-#       return s
 
 def fun2s_function(fun, name=None, dir=".",ignore_errors=False,build_dir_abs=None):
     fun_name = fun.name()
@@ -400,163 +257,6 @@ def fun2s_function(fun, name=None, dir=".",ignore_errors=False,build_dir_abs=Non
     return s_function_file_name_base
 
 
-class Diagram:
-  def __init__(self,template,simulink_library_name,simulink_library_dirname=None):
-    self.masks = []
-    self.template = template
-    self.simulink_library_name = simulink_library_name
-    self.simulink_library_dirname = simulink_library_dirname
-    self.simulink_library_filename = simulink_library_dirname+".slx"
-    self.next_id = 1
-
-  def add(self,mask):
-    mask.register(self.next_id)
-    self.next_id = mask.max_id
-    self.masks.append(mask)
-
-  def write(self):
-    with ZipFile(self.template) as zipfile:
-      zipfile.extractall(path=self.simulink_library_dirname)
-    blockdiagram_filename = os.path.join(self.simulink_library_dirname,"simulink","blockdiagram.xml")
-    with open(blockdiagram_filename,'r') as blockdiagram_file:
-      tree = etree.parse(blockdiagram_file)
-
-    system = tree.find('.//System')
-    for e in system.findall('Block'):
-      system.remove(e)
-    for e in system.findall('Line'):
-      system.remove(e)
-
-
-    height_spacing = 100
-    max_width = 1920
-    offset_x = 0
-    offset_y = 0
-    height = 0
-    max_id = 0
-    for m in self.masks:
-      # Overflow
-      if offset_x+m.width>max_width and offset_x>0:
-        offset_y += height+height_spacing
-        offset_x = 0
-      else:
-        offset_x += m.width
-        height = max(height, m.height)
-      m.write(system,offset_left = offset_x, offset_top=offset_y)
-      max_id = max(max_id, m.max_id)
-
-    highwater = system.find('P[@Name="SIDHighWatermark"]')
-    highwater.text = str(max_id)
-
-    tree.write(blockdiagram_filename)
-    shutil.make_archive(self.simulink_library_filename,'zip',self.simulink_library_dirname)
-    shutil.move(self.simulink_library_filename+".zip",self.simulink_library_filename)
-
-
-class Mask:
-  def __init__(self,s_function, port_labels_in=None, port_labels_out=None, block_name="", name=None, port_in=None,port_out=None,dependencies=None,init_code=""):
-    self.dependencies = dependencies
-    self.s_function = s_function
-    self.port_labels_in = port_labels_in
-    self.port_labels_out = port_labels_out
-    if port_in is None:
-      port_in = []
-    self.port_in = port_in
-    self.init_code = init_code
-    self.name = name
-    self.block_name = block_name
-    self.stride_height  = 40
-    self.padding_height = 10
-    self.unit_height  = 40
-
-    self.margin_left = 100
-    self.margin_top = 100
-
-    self.constant_width = 30
-    self.constant_height = 30
-
-    self.line_width = 100
-    self.sfun_width = 200
-    self.sfun_height = self.stride_height*max(len(self.port_labels_in),len(self.port_labels_out))
-
-    self.constant_height_offset = 5
-    self.zorder = 7
-
-    mask_commands = []
-    for k,e in enumerate(self.port_labels_in):
-      mask_commands.append(f"port_label('input',{k+1},'{e}');")
-    mask_commands.append(f"disp('{self.name}');")
-    for k,e in enumerate(self.port_labels_out):
-      mask_commands.append(f"port_label('output',{k+1},'{e}');")
-
-    self.mask_commands = "\n".join(mask_commands)
-  def register(self, base):
-    num_elem = len(self.port_in)+2
-    self.base_id = base
-    self.max_id = self.base_id+num_elem
-
-  @property
-  def width(self):
-    return self.sfun_width+self.constant_width+self.line_width
-  @property
-  def height(self):
-    return self.sfun_height
-
-  def write(self,system,offset_left=0,offset_top=0):
-    margin_left = self.margin_left+offset_left
-    margin_top = self.margin_top+offset_top
-
-    sfun_margin_left = margin_left+self.constant_width+self.line_width
-    sfun_margin_top = margin_top
-
-
-    s = f"""
-    <Block BlockType="S-Function" Name="Block_{self.block_name}" SID="{self.base_id}">
-      <P Name="Ports">[{len(self.port_labels_in)}, {len(self.port_labels_out)}]</P>
-      <P Name="Position">[{sfun_margin_left}, {sfun_margin_top}, {sfun_margin_left+self.sfun_width}, {sfun_margin_top+self.sfun_height}]</P>
-      <P Name="ZOrder">{self.zorder}</P>
-      <P Name="FunctionName">{self.s_function}</P>
-      <P Name="SFunctionDeploymentMode">off</P>
-      <P Name="EnableBusSupport">off</P>
-      <P Name="SFcnIsStateOwnerBlock">off</P>
-      <P Name="InitFcn">{self.init_code}</P>
-      <Object PropName="MaskObject" ObjectID="{self.base_id+7}" ClassName="Simulink.Mask">
-        <P Name="Display" Class="char">{self.mask_commands}</P>
-      </Object>"""
-    if self.dependencies:
-      s+=f"""<P Name="SFunctionModules">&apos;{" ".join(self.dependencies)}&apos;</P>"""
-    s += f"</Block>"
-    try:
-      system.append(etree.fromstring(s))
-    except Exception as e:
-      for i,line in enumerate(s.split("\n")):
-        print(i,line)
-      raise e
-
-    for i, (default, label) in enumerate(zip(self.port_in,self.port_labels_in)):
-      id = self.base_id+i+2
-      if default is None: continue
-      zorder = 7
-      block = etree.fromstring(f"""
-      <Block BlockType="Constant" Name="Constant{id}" SID="{id}">
-        <P Name="Position">[{margin_left}, {margin_top+i*self.stride_height+self.constant_height_offset}, {margin_left+self.constant_width}, {margin_top+self.constant_height+i*self.stride_height+self.constant_height_offset}]</P>
-        <P Name="ZOrder">{zorder}</P>
-        <P Name="Value">{default}</P>
-        <P Name="VectorParams1D">off</P>
-      </Block>
-      """)
-      system.append(block)
-
-      block = etree.fromstring(f"""
-      <Line>
-        <P Name="ZOrder">1</P>
-        <P Name="Src">{id}#out:1</P>
-        <P Name="Dst">{self.base_id}#in:{i+1}</P>
-      </Line>
-      """)
-      system.append(block)
-
-
 
 class MPC(Ocp):
   """This should be a description of the MPC class.
@@ -589,8 +289,21 @@ class MPC(Ocp):
         args = args[1:]
     else:
       name = "u%d" % self.nu
+    
+    n_rows = args[0] if len(args)>0 else 1
+    n_cols = args[1] if len(args)>1 else 1
+    scale = args[2] if len(args)>2 else 1
+    
+    order = kwargs['order'] if 'order' in kwargs else 0
+
+    if order >= 1: 
+        u = self.state(n_rows, n_cols, scale=scale)
+        helper_u = self.control(n_rows=n_rows, n_cols=n_cols, order=order - 1, scale=scale)
+        self.set_der(u, helper_u)
+        return u
+    
     u = MX.sym(name,*args)
-    self.register_control(u,**kwargs)
+    self.register_control(u,scale)
     self.expr._register('u', {name: u})
     return u
 
@@ -599,10 +312,10 @@ class MPC(Ocp):
         name = args[0]
         args = args[1:]
     else:
-      if "quad" in kwargs and kwargs["quad"]:
-        name = "xq%d" % self.nxq
-      else:
-        name = "x%d" % self.nx
+      # if "quad" in kwargs and kwargs["quad"]:
+      #   name = "xq%d" % self.nxq # This gets an error since self.nxq does not exist
+      # else:
+      name = "x%d" % self.nx
     x = MX.sym(name,*args)
     self.register_state(x,**kwargs)
     self.expr._register('x', {name: x})
@@ -1184,6 +897,12 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
         :rtype: Model
 
     """
+    from pathlib import Path
+    if not Path(file_name).is_file(): # check that the file exists
+        raise Exception(f"The model file {file_name} does not exist. Please try with another file name.") 
+    else:
+        # Initialize model object
+        m = Model(name+".")
 
     if mode=="sys_id":
       dae_rockit = dae_rockit_sys_id
@@ -1191,12 +910,59 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
       dae_rockit = dae_rockit_normal
     else:
       raise Exception("Unknown mode: '%s' - pick 'normal' or 'sys_id'" % mode)
+    
+    # Read meta information from YAML file
+    if file_name.endswith('.yaml'): 
+      with open(file_name) as file:
+          model_meta = yaml.load(file, Loader=yaml.FullLoader)
 
-    # Read meta information
-    with open(file_name) as file:
-        model_meta = yaml.load(file, Loader=yaml.FullLoader)
+      # Add the serialized CasADi functions specified in the yaml file as equations/functions to the model.
+      robot_functions = {}
+      definitions = casadi.__dict__
+      locals = dict(m._d)
+      if "functions" in model_meta:
+        functions = model_meta["functions"]
+        if "external" in functions:
+          external_functions = functions["external"]
+          for k,v in external_functions.items():
+            assert external_functions[k]["type"]=="casadi_serialized"
+            robot_functions[k] = Function.load(f"{v['file_name']}")
+      m._update(robot_functions)
+      locals.update(robot_functions)
 
-    m = Model(name+".")
+          
+    # Read meta information from YAML file inside a compressed folder (.impz)   
+    elif file_name.endswith('.impz'): 
+      from tempfile import TemporaryDirectory
+
+      # Retrieve the model file
+      zip_file = ZipFile(file_name)
+      
+      with TemporaryDirectory() as tempdir:
+          # Extract all files in model file into a temporary directory
+          zip_file.extractall(tempdir)
+
+          for file in os.listdir(tempdir):
+            if file.endswith(".yaml"):
+              # Open YAML file and load it as model_meta
+              with open(f"{tempdir}/{file}", 'r') as yamlfile:
+                model_meta = yaml.load(yamlfile, Loader=yaml.FullLoader)
+              # If a YAML file has been found, stop iterating over the extracted files
+              break
+          
+          # Add the serialized CasADi functions specified in the yaml file as equations/functions to the model.
+          robot_functions = {}
+          definitions = casadi.__dict__
+          locals = dict(m._d)
+          if "functions" in model_meta:
+            functions = model_meta["functions"]
+            if "external" in functions:
+              external_functions = functions["external"]
+              for k,v in external_functions.items():
+                assert external_functions[k]["type"]=="casadi_serialized"
+                robot_functions[k] = Function.load(f"{tempdir}/{v['file_name']}")
+          m._update(robot_functions)
+          locals.update(robot_functions)
 
     # Define constants
     constants = {}
@@ -1418,9 +1184,9 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
         if line.startswith("}"):
           fun_context = ""
 
-        if "return 0;" in line and fun_context=="solver":
-          s = "end_t = clock();\n"
-          s+= "CASADI_PREFIX(stats).runtime = (casadi_real)(end_t - start_t) / CLOCKS_PER_SEC;\n"
+        if ("return 0;" in line or "return d->unified_return_status;" in line) and fun_context=="solver" :
+          s = "\tend_t = clock();\n"
+          s+= "\tCASADI_PREFIX(stats).runtime = (casadi_real)(end_t - start_t) / CLOCKS_PER_SEC;\n"
           line = s+line
 
         if "Add prefix to internal symbol" in line:
@@ -1501,11 +1267,10 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
         struct_strings = ["struct casadi_sqpmethod_prob p;",
                           "struct casadi_feasiblesqpmethod_prob p;",
                           "struct casadi_ipopt_prob p;",
-                          "casadi_fatrop_prob p;"
-                          ]
+                          "struct casadi_fatrop_prob p;"]
 
         if any(s in line for s in struct_strings):
-          line = "clock_t start_t, end_t;\nstart_t=clock();\n" + line
+          line = line + "\tclock_t start_t, end_t;\n\tstart_t=clock();\n"
 
         if "MAIN OPTIMIZATION LOOP" in line:
           s=""
@@ -1560,21 +1325,90 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
   def opti_p(self):
     return self._method.opti.p
 
+  def save(self,name):
+      self._untranscribe()
+      import pickle
+      with rockit_pickle_context():
+          pickle.dump(self,open(name,"wb"))
 
-  def export(self,name,src_dir=".",use_codegen=None,context=None,ignore_errors=False,short_output=True,qp_error_on_fail=True,c_flags=["-O3"]):
+  def export(self, name, src_dir=".", use_codegen=None, context=None, ignore_errors=False, short_output=True, qp_error_on_fail=True, c_flags=["-O3"], add_simulator=False, compile=True, mode='standard', ros2=False, ros2_options={}):
     build_dir_rel = name+"_build_dir"
     build_dir_abs = os.path.join(os.path.abspath(src_dir),build_dir_rel)
 
+    # optimization_compilation_flags = ['-O3', '-march=native'] if mode == 'release' else ['-g']
+    if mode == 'standard':
+       optimization_compilation_flags = ['-O1']
+    elif mode == 'debug':
+       optimization_compilation_flags = ['-g']
+    elif mode == 'release':
+      optimization_compilation_flags = ['-O3']
+    elif mode == 'release_native':
+      optimization_compilation_flags = ['-O3', '-march=native']
+
+    optimization_compilation_flags_str = ""
+    for elem in optimization_compilation_flags:
+      optimization_compilation_flags_str += "'" + elem + "' "
 
     prepare_build_dir(build_dir_abs)
 
-    artifacts = self._method.artifacts
-    print(self.x)
-    print(self.z)
-    print(self.u)
+    artifacts = list(self._method.artifacts)
 
-    print(self.p)
+    for e in artifacts:
+      shutil.copy(os.path.join(self._method.build_dir_abs, e.name), build_dir_abs)
+    
+    # print(self._stages)
+    # for stage in self._stages:
+    #   print(stage.x)
+    #   print(stage.z)
+    #   print(stage.u)
+    #   print(stage.p)
+    #   print(stage.parameters)
 
+    # print("------ OCP ------")
+    # print(self.x)
+    # print(self.z)
+    # print(self.u)
+    # print(self.p)
+    # print(self.parameters)
+
+    ############################################################
+    # Towards multi-stage
+    ############################################################
+
+    # for stage in self._stages:
+    #   print(stage.x)
+    #   print(stage.z)
+    #   print(stage.u)
+
+    #   [_,stage_states] = stage.sample(stage.x,grid='control')
+    #   [_,stage_algebraics] = stage.sample(stage.z,grid='control')
+    #   [_,stage_controls] = stage.sample(stage.u,grid='control-')
+
+    #   print(stage_states.shape)
+    #   exit()
+
+    #   variables = []
+    #   variables_symbols = self.variables['']+self.variables['control']+self.variables['control+']
+    #   for v in self.variables['']:
+    #     variables.append(self.value(v))
+    #   for v in self.variables['control']:
+    #     variables.append(self.sample(v,grid='control-')[1])
+    #   for v in self.variables['control+']:
+    #     variables.append(self.sample(v,grid='control')[1])
+
+    # parameters_symbols = self.parameters['']+self.parameters['control']+self.parameters['control+']
+    # parameters = []
+    # for p in self.parameters['']:
+    #   parameters.append(self.value(p))
+    # for p in self.parameters['control']:
+    #   parameters.append(self.sample(p,grid='control-')[1])
+    # for p in self.parameters['control+']:
+    #   parameters.append(self.sample(p,grid='control')[1])
+    
+
+    ############################################################
+    # Original
+    ############################################################
     [_,states] = self.sample(self.x,grid='control')
     [_,algebraics] = self.sample(self.z,grid='control')
     [_,controls] = self.sample(self.u,grid='control-')
@@ -1594,6 +1428,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
       variables.append(self.sample(v,grid='control-')[1])
     for v in self.variables['control+']:
       variables.append(self.sample(v,grid='control')[1])
+    ############################################################
 
     casadi_fun_name = 'ocpfun'
     is_coll = False
@@ -1638,6 +1473,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
       for p,appearing in zip(parameters_symbols,self.is_parameter_appearing_in_sys()):
         if appearing:
           sim_p.append(p)
+          label_in.append(p.name()) # possible solution for #9
       sim_p = vvcat(sim_p)
       if sim_p.numel()>0:
         args.append(sim_p)
@@ -1653,8 +1489,6 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
       label_in.append("dt")
       sim_args["dt"] = dt
 
-
-
       if self.nz>0:
         z_initial_guess = MX.sym("z_initial_guess",self.nz)
         args.append(z_initial_guess)
@@ -1668,9 +1502,9 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
         outs.append(sim_out["zf"])
         labels_out.append("zf")
       
-      mysim = Function('integrate_'+name, args, outs, label_in, labels_out)
-
-      self.add_function(mysim)
+      if add_simulator:
+        mysim = Function('integrate_'+name, args, outs, label_in, labels_out)
+        self.add_function(mysim)
 
     if not self._state_next:
       sys_dae = self.sys_dae()
@@ -2835,7 +2669,6 @@ int {prefix}flag_value({prefix}struct* m, int index);
     lib_name = name
     lib_file_name = os.path.join(build_dir_abs,"lib" + lib_name + ".so")
 
-
     s_function_name = name+"_s_function_level2"
 
     s_function_file_name_base = s_function_name+".c"
@@ -3224,10 +3057,27 @@ int {prefix}flag_value({prefix}struct* m, int index);
         files = {{[build_dir filesep s_function_file_name_base]}};
         """)
 
+      if use_codegen:
+        ipopt = ''
+        fatrop = ''
+
+        if CURRENT_CASADI_VERSION>=version.parse("3.6.3"):          
+          ipopt = "'-lipopt'"
+          if casadi.has_nlpsol("fatrop") and casadi.has_nlpsol("blasfeo"):
+            fatrop = "'-lfatrop -lblasfeo'"
+
+        out.write(f"""
+          files=[files {{ [build_dir filesep casadi_codegen_file_name_base]}}];
+          flags=[flags {{['-I' casadi.GlobalOptions.getCasadiIncludePath()] ['-I' casadi.GlobalOptions.getCasadiPath()] '-losqp' {ipopt} {fatrop}}}];
+          """)
+      else:
+        out.write(f"""
+          flags=[flags {{'-lcasadi'}}];
+          """)
       out.write(f"""
       if ispc
       else
-        flags=[flags {{['LDFLAGS=\"\$LDFLAGS -Wl,-rpath,' build_dir '\"']}}];
+        flags=[flags {{{optimization_compilation_flags_str} ['LDFLAGS=\"\$LDFLAGS -Wl,-rpath,' casadi.GlobalOptions.getCasadiPath() ' -Wl,-rpath,' build_dir '\"']}}];
       end
       mex(flags{{:}},files{{:}});\n""")
       for f_name in added_functions:
@@ -3559,11 +3409,16 @@ plt.show()
 
       if use_codegen:
         lib_codegen_file_name = os.path.join(build_dir_abs,"lib" + name + "_codegen.so")
-        #lib_codegen_compile_commands = [compiler]+c_flags+["-fPIC","-shared"]+source_files+ ["-lm","-o"+lib_codegen_file_name]+deps
+        lib_codegen_compile_commands = ["gcc"] + c_flags + optimization_compilation_flags + ["-fPIC","-shared"]+source_files+ ["-lm","-o"+lib_codegen_file_name]+deps
         deps += ["-l"+name+"_codegen","-losqp"]
 
-        if modern_casadi():
-          deps += ["-lipopt","-lfatrop","-lblasfeo"]
+
+        if CURRENT_CASADI_VERSION>=version.parse("3.6.3"):
+          deps += ["-lipopt"]
+
+          if casadi.has_nlpsol("fatrop"): deps += ["-lfatrop"]
+          if casadi.has_nlpsol("blasfeo"): deps += ["-lblasfeo"]
+          
         fatrop_driver = os.path.join(os.path.abspath(src_dir),"foobar","lib","libfatrop_driver.so")
         if os.path.exists(fatrop_driver):
           shutil.copy(fatrop_driver, build_dir_abs)
@@ -3576,11 +3431,11 @@ plt.show()
       for e in artifacts:
         if isinstance(e, LibraryArtifact):
           deps += ["-l" + e.basename]
-      #lib_compile_commands = [compiler]+c_flags+["-fPIC","-shared",c_file_name,"-o"+lib_file_name]+deps+flags
+      lib_compile_commands = ["gcc"] + c_flags + optimization_compilation_flags + ["-fPIC","-shared",c_file_name,"-o"+lib_file_name]+deps+flags
 
-      #hello_compile_commands = [compiler]+c_flags+[hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-o",hello_file_name]+deps+flags
+      hello_compile_commands = ["gcc"] + c_flags + optimization_compilation_flags + [hello_c_file_name,"-I"+build_dir_abs,"-l"+lib_name,"-o",hello_file_name]+deps+flags
 
-      if False:
+      if compile and os.name!="nt":
         print("Compiling")
         import subprocess
         if use_codegen:
@@ -3598,8 +3453,11 @@ plt.show()
           p = subprocess.run(hello_compile_commands, capture_output=True, text=True)
           if p.returncode!=0:
             raise Exception("Failed to compile:\n{args}\n{stdout}\n{stderr}".format(args=" ".join(p.args),stderr=p.stderr,stdout=p.stdout))
+        print(hello_compile_commands)
+      else:
+        print(f"Not compiling Impact artifacts. compile {compile}")
 
-      """print(hello_compile_commands)
+      """
       if use_codegen:
         out.write(os.path.basename(lib_codegen_file_name) + ": " + " ".join([os.path.basename(e) for e in source_files]) + "\n")
         out.write("\t"+" ".join(lib_codegen_compile_commands)+"\n\n")
@@ -3625,13 +3483,53 @@ plt.show()
       cmake --build build --config Release
       cmake --install build --prefix .
       """)
-    print("success")
 
-  def save(self,name):
-      self._untranscribe()
-      import pickle
-      with rockit_pickle_context():
-          pickle.dump(self,open(name,"wb"))
+
+    #  -- Discrete model code generation (extra node) ---
+    try:
+        import casadi as cs
+        # Rockit exposes a discrete map builder on the method:
+        if hasattr(self._method, "discrete_system"):
+            fdisc = self._method.discrete_system(self)  # (x0,u,T) -> {"xf": ...}
+
+            # Symbols with the right sizes
+            x0 = cs.MX.sym('x0', self.nx)
+            u  = cs.MX.sym('u', self.nu if isinstance(self.nu, int) else int(self.nu))
+            T  = cs.MX.sym('T')
+
+            xf = fdisc(x0=x0, u=u, T=T)["xf"]
+
+            # Name the C function <name>_step and the unit (file) <name>_model
+            step_fun = cs.Function(f"{name}_step", [x0, u, T], [xf],
+                                  ["x0","u","T"], ["xf"])
+
+            cg_model = cs.CodeGenerator(f"{name}_model", {"with_header": True})
+            cg_model.add(step_fun)
+            cg_model.generate(build_dir_abs + os.sep)
+            print(f"Generated discrete model C at {build_dir_rel}/{name}_model.c")
+        else:
+            print("Warning: method has no discrete_system(...); skipping model codegen.")
+    except Exception as e:
+        print(f"Warning: discrete model codegen failed: {e}")
+    # -- Discrete model code generation (extra node) ---
+
+
+
+    if ros2: 
+      ROS2gen = ROS2Generator(
+          mpc_specification = self,
+          package_name = name,
+          ros2_options= ros2_options,
+      )
+      print(f"\nExporting ROS 2 package {name} ...")
+
+      ROS2gen.export_package()
+      print(f"\nROS 2 package {name} exported")
+
+
+    print("\nsuccess")
+
+
 
   @staticmethod
   def load(name):

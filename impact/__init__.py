@@ -1,8 +1,10 @@
 from .mpc import MPC
 from .model import Model
 from .dotdict import DotDict
+from .artifact_ros import ROS2Generator
 from .helpers import simulink_parse_states
-from rockit import DirectCollocation, MultipleShooting, SingleShooting, matlab_path, external_method
+from rockit import DirectCollocation, MultipleShooting, SingleShooting, matlab_path, external_method, FreeTime
+
 import os
 
 try:

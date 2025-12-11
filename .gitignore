@@ -2,16 +2,18 @@
 __pycache__/
 impact_meco.egg-info/
 impact.egg-info/
+impact_meco.egg-info/
 docs/build/
 docs/apidoc/
 docs/source/examples
 c_generated_code/
 build/
 dist/
-examples/*_build_dir/
+examples/*/*_build_dir/
+examples/wip/ROS/
 
 # Generated objects
-examples/*.impact
+examples/*/*.impact
 
 # Notebook checkpoints
 .ipynb_checkpoints/

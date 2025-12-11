@@ -1,0 +1,50 @@
+equations:
+  external:
+    type: casadi_serialized
+    file_name: franka_ode_eq.casadi
+differential_states:
+- name: q1
+- name: q2
+- name: q3
+- name: q4
+- name: q5
+- name: q6
+- name: q7
+- name: dq1
+- name: dq2
+- name: dq3
+- name: dq4
+- name: dq5
+- name: dq6
+- name: dq7
+controls:
+- name: tau1
+- name: tau2
+- name: tau3
+- name: tau4
+- name: tau5
+- name: tau6
+- name: tau7
+constants:
+  inline:
+    ndof: 7
+    nq: 7
+    nv: 7
+    gravity: '[ 0.  , 0.  ,-9.81]'
+    joint_pos_ub: '[ 2.8973, 1.7628, 2.8973,-0.0698, 2.8973, 3.7525, 2.8973]'
+    joint_pos_lb: '[-2.8973,-1.7628,-2.8973,-3.0718,-2.8973,-0.0175,-2.8973]'
+    joint_vel_ub: '[2.175,2.175,2.175,2.175,2.61 ,2.61 ,2.61 ]'
+    joint_vel_lb: '[-2.175,-2.175,-2.175,-2.175,-2.61 ,-2.61 ,-2.61 ]'
+    joint_torque_ub: '[87.,87.,87.,87.,12.,12.,12.]'
+    joint_torque_lb: '[-87.,-87.,-87.,-87.,-12.,-12.,-12.]'
+functions:
+  external:
+    fk:
+      type: casadi_serialized
+      file_name: franka_fk_eq.casadi
+    fd:
+      type: casadi_serialized
+      file_name: franka_fd_eq.casadi
+    id:
+      type: casadi_serialized
+      file_name: franka_id_eq.casadi

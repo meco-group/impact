@@ -111,3 +111,46 @@ def simulink_parse_states(mdl,unzipped_path):
             all_states.append(e)
 
     return all_states
+
+def escape(e):
+  return e.replace('\\','/')
+  
+def field_type_to_DataType(t):
+  if t=="double":
+    return "double"
+  elif t=="float":
+    return "single"
+  elif t=="int":
+    return "int32"
+
+def field_type_to_matlab_c(t):
+  if t=="double":
+    return "double"
+  elif t=="float":
+    return "float"
+  elif t=="int":
+    return "int32_T"
+
+def field_type_to_c(t):
+  return t
+
+def write_struct(s,target="c"):
+  # #include "tmwtypes.h"
+  ret = ""
+  ret += "typedef struct {\n"
+  conv = field_type_to_c if target=="c" else field_type_to_matlab_c
+  for f in s.fields:
+    ret+= "  " + conv(f.type) + " " + f.name + ";\n"
+  ret += "}" + s.name + ";"
+  return ret
+
+def write_bus(s):
+  ret = f"{s.name} = Simulink.Bus;\n"
+  ret += "elements = {};\n"
+  for f in s.fields:
+    ret+= "e = Simulink.BusElement;\n"
+    ret+= f"e.Name = '{f.name}';\n"
+    ret+= f"e.DataType = '{field_type_to_DataType(f.type)}';\n"
+    ret+= "elements{end+1} = e;\n"
+  ret += f"{s.name}.Elements = [elements{{:}}];"
+  return ret
