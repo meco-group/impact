@@ -1,4 +1,4 @@
-# Impact: A Toolchain for Nonlinear Model Predictive Control Specification, Prototyping, and Deployment
+# Impact: A Toolchain for Optimal Control and Model Predictive Control Specification, Prototyping, and Deployment
 
 <div align="center">
 
@@ -19,15 +19,22 @@
 
 ## Description
 
-Impact is a flexible toolchain for nonlinear model predictive control (NMPC) specification with automatic code generation capabilities. 
 
-The toolchain reduces the engineering complexity of NMPC implementations by providing the user with an easy-to-use application programming interface, and with the flexibility of using multiple state-of-the-art tools and numerical optimization solvers for rapid prototyping of NMPC solutions. 
+[//]: # "Impact is a flexible toolchain for nonlinear model predictive control (NMPC) specification with automatic code generation capabilities. " 
+Impact is a flexible toolchain for the specification, prototyping, and deployment of optimal control problems (OCP) and model predictive control (MPC) strategies, with automatic generation of deployable artifacts.
 
-Impact is written in Python, users can call it from Python and MATLAB, and the generated NMPC solvers can be directly executed from C, Python, MATLAB and Simulink.
+[//]: # "The toolchain reduces the engineering complexity of NMPC implementations by providing the user with an easy-to-use application programming interface, and with the flexibility of using multiple state-of-the-art tools and numerical optimization solvers for rapid prototyping of NMPC solutions. " 
+The toolchain reduces the engineering complexity of MPC implementations by providing an intuitive application programming interface and flexible integration with state-of-the-art numerical optimization solvers for rapid prototyping.
+
+[//]: # "Impact is written in Python, users can call it from Python and MATLAB, and the generated NMPC solvers can be directly executed from C, Python, MATLAB and Simulink." 
+Impact is written in Python, with bindings for MATLAB. The generated artifacts can be executed from C, Python, MATLAB, Simulink, and ROS 2 environments.
 
 **License:** Impact is released under the [GNU LGPLv3 license](LICENSE).
 
 ## Installation
+
+We recommend installing Impact in a Python virtual environment to avoid dependency
+conflicts and to keep the installation isolated from system-wide packages.
 
 ### Option 1: Installing with pip
 You can install Impact (ideally into a virtual environment) via pip using the following command:
@@ -37,16 +44,17 @@ pip install impact-meco
 ```
 
 ### Option 2: Installing from cloned repository
-Alternatively, you can clone this repository and install Impact from source. You just need to (i) clone the repository, (ii) move into Impact's root directory, and (iii) run the `setup.py` script with the `install` option. It will install your application into the virtualenv site-packages folder and also download and install all dependencies:
-
+Alternatively, you can clone this repository and install Impact from source:
 ```
 git clone https://gitlab.kuleuven.be/meco-software/impact.git
 cd impact
-python setup.py install
+pip install .
 ```
-You could also use the `develop` option, instead of `install`, during the execution of `setup.py` as `python setup.py develop`. 
-This has the advantage of just installing a link to the site-packages folder instead of copying the data over. You can then modify/update the source code without having to run `python setup.py install` again after every change.
-
+For development, we recommend an editable installation:
+```
+pip install -e .
+```
+This installs Impact in editable mode, so changes to the source code take effect immediately without reinstalling.
 
 ## Submitting an issue
 
@@ -54,7 +62,7 @@ Please submit an issue if you want to report a bug or propose new features of th
 
 ## Citing
 
-If you use this library, we would be grateful if you could cite [the following paper](https://doi.org/10.1016/j.ifacol.2023.10.1451): 
+When using this Impact toolchain in research or publications, please cite the following article: [the following paper](https://doi.org/10.1016/j.ifacol.2023.10.1451): 
 <details>
 <summary> A. Florez, A. Astudillo, W. Decré, J. Swevers, and J. Gillis, "IMPACT: A Toolchain for Nonlinear Model Predictive Control Specification, Prototyping, and Deployment", IFAC-PapersOnLine, vol. 56, no. 2, pp. 3164–3169, 2023,
 doi: 10.1016/j.ifacol.2023.10.1451
@@ -81,7 +89,7 @@ doi: 10.1016/j.ifacol.2023.10.1451
 
 <br/>
 
-If you use the ROS 2 package generator of Impact, we would appreciate if you cite [the following paper](http://dx.doi.org/10.1109/AMC58169.2024.10505632):
+When using the ROS 2 package generator of Impact in research or publications, please cite the following article: [the following paper](http://dx.doi.org/10.1109/AMC58169.2024.10505632):
 <details>
 <summary> A. Astudillo, A. Florez, W. Decré, and J. Swevers, "Rapid Deployment of Model Predictive Control for Robotic Systems: From IMPACT to ROS 2 Through Code Generation", in Proceedings of the 2024 IEEE 18th International Conference on Advanced Motion Control (AMC), 2024,
 doi: 10.1109/amc58169.2024.10505632
