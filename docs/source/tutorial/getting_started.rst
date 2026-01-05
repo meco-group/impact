@@ -55,7 +55,7 @@ Then, we can instantiate the MPC object. The value of :code:`T` in seconds corre
 
         mpc = MPC('T', 2.0);
 
-It is possible to have a dynamic horizon length, it will become an additional variable of the problem. Such problems are known as free-time problems.
+(variation of the MPC object instantiation) It is possible to have a dynamic horizon length, it will become an additional variable of the problem. Such problems are known as free-time problems.
 
 .. tab:: Python
 
