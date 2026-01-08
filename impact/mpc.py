@@ -3052,6 +3052,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
     with open(m_build_file_name,"w") as out:
       out.write(f"""
         s_function_file_name_base = '{s_function_file_name_base}';
+        casadi_codegen_file_name_base = '{casadi_codegen_file_name_base}';
         [build_dir,~,~] = fileparts(mfilename('fullpath'));
         flags={{['-I' build_dir] ['-L' build_dir] '-DCASADI_PRINTF=mexPrintf' '-l{name}'}};
         files = {{[build_dir filesep s_function_file_name_base]}};
@@ -3068,7 +3069,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
         out.write(f"""
           files=[files {{ [build_dir filesep casadi_codegen_file_name_base]}}];
-          flags=[flags {{['-I' casadi.GlobalOptions.getCasadiIncludePath()] ['-I' casadi.GlobalOptions.getCasadiPath()] '-losqp' {ipopt} {fatrop}}}];
+          flags=[flags {{['-I' casadi.GlobalOptions.getCasadiIncludePath()] ['-l' casadi.GlobalOptions.getCasadiPath()] '-losqp' {ipopt} {fatrop}}}];
           """)
       else:
         out.write(f"""
