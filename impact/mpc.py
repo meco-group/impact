@@ -1353,7 +1353,13 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
 
     artifacts = list(self._method.artifacts)
 
+    # for e in artifacts:
+    #   shutil.copy(os.path.join(self._method.build_dir_abs, e.name), build_dir_abs)
+
     for e in artifacts:
+      if hasattr(e, "copy_to_build_dir"):
+        e.copy_to_build_dir(build_dir_abs)
+        continue
       shutil.copy(os.path.join(self._method.build_dir_abs, e.name), build_dir_abs)
     
     # print(self._stages)

@@ -259,7 +259,7 @@ The solver is defined using the method :code:`.solver()`. Each solver has its ow
 
 
 :code:`Acados` `Acados <https://docs.acados.org/>`_ is a toolbox for optimal control and nonlinear MPC, it offers QP, and NLP solvers tailored for real-time applications. It interfaces different solvers like HPIPM, qpOASES, DAQP and OSQP.
-Acados can be used in Impact, it is invoked using the function :code:`external_method()` in the :code:`.method()` definition of the problem. It defines transcription and solver, all acados parameters and solvers are configured there.
+Acados can be used in Impact, it is invoked using the function :code:`external_method()` in the :code:`.method()` definition of the problem. It defines transcription and solver, all acados parameters and solvers are configured there (An illustrative example of this solver is provided in the examples folder).
 
 ----------------------
 Initial guess
@@ -338,6 +338,13 @@ The exportation options are:
   *  :code:`ros2_options` is a ditionary with the options for the ROS2 node. The options are:
   
     * :code:`'repeat_on_fail'` is a string that indicates whether to repeat the excecution on failure or not. 
+  
+  *   :code:`mode` defines how the generated C code is compiled. Options are:
+  
+      * :code:`'standard'` (default) The C code is compiled with the optimization flag :code:`'-O1'`, enabling mild compiler optimizations that balance performance, compilation time, and numerical robustness. This mode is suitable for most development and deployment scenarios.
+      * :code:`'debug'` The C code is compiled with the :code:`'-g'` optimization flag, disabling optimizations and including debug symbols. This mode is intended for debugging and inspection of the generated code.
+      * :code:`'release'` The C code is compiled with the :code:`'-O3'` optimization flag, enabling aggressive compiler optimizations for maximum runtime performance. This mode is recommended for performance benchmarking and production builds on desktop platforms.
+      * :code:`'release_native'` The C code is compiled with the :code:`'-O3', '-march=native'` optimization flags, enabling aggressive optimizations tailored to the host machine's architecture (host CPU). This mode yields the highest performance but produces binaries that are not portable across different machines or architectures.
 
 The exportation creates artifacts for the MPC controller, and additional functions for the cost function and for the discrete version of the system model. They are useful for simulation and fot prototyping purposes.  
 
