@@ -8,7 +8,7 @@ from impact import *
 
 mpc = MPC(T=2.0)
 
-cart_pendulum = mpc.add_model('cart_pendulum','cart_pendulum2.yaml')
+cart_pendulum = mpc.add_model('cart_pendulum','cart_pendulum.yaml')
 
 ## Parameters
 x_current = mpc.parameter('x_current',cart_pendulum.nx)
