@@ -1345,9 +1345,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
     elif mode == 'release_native':
       optimization_compilation_flags = ['-O3', '-march=native']
 
-    optimization_compilation_flags_str = ""
-    for elem in optimization_compilation_flags:
-      optimization_compilation_flags_str += "'" + elem + "' "
+    optimization_compilation_flags_str = " ".join(optimization_compilation_flags)
 
     prepare_build_dir(build_dir_abs)
 
@@ -3071,7 +3069,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
         if CURRENT_CASADI_VERSION>=version.parse("3.6.3"):          
           ipopt = "'-lipopt'"
           if casadi.has_nlpsol("fatrop"):
-            fatrop = "'-lfatrop -lblasfeo'"
+            fatrop = "'-lfatrop' '-lblasfeo'"
 
         out.write(f"""
           files=[files {{ [build_dir filesep casadi_codegen_file_name_base]}}];
@@ -3084,7 +3082,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
       out.write(f"""
       if ispc
       else
-        flags=[flags {{{optimization_compilation_flags_str} ['LDFLAGS=\"\$LDFLAGS -Wl,-rpath,' casadi.GlobalOptions.getCasadiPath() ' -Wl,-rpath,' build_dir '\"']}}];
+        flags=[flags {{['CFLAGS=\"\$CFLAGS {optimization_compilation_flags_str}\"'] ['LDFLAGS=\"\$LDFLAGS -Wl,-rpath,' casadi.GlobalOptions.getCasadiPath() ' -Wl,-rpath,' build_dir '\"']}}];
       end
       mex(flags{{:}},files{{:}});\n""")
       for f_name in added_functions:
