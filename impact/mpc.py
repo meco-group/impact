@@ -3070,12 +3070,12 @@ int {prefix}flag_value({prefix}struct* m, int index);
 
         if CURRENT_CASADI_VERSION>=version.parse("3.6.3"):          
           ipopt = "'-lipopt'"
-          if casadi.has_nlpsol("fatrop") and casadi.has_nlpsol("blasfeo"):
+          if casadi.has_nlpsol("fatrop"):
             fatrop = "'-lfatrop -lblasfeo'"
 
         out.write(f"""
           files=[files {{ [build_dir filesep casadi_codegen_file_name_base]}}];
-          flags=[flags {{['-I' casadi.GlobalOptions.getCasadiIncludePath()] ['-l' casadi.GlobalOptions.getCasadiPath()] '-losqp' {ipopt} {fatrop}}}];
+          flags=[flags {{['-I' casadi.GlobalOptions.getCasadiIncludePath()] ['-L' casadi.GlobalOptions.getCasadiPath()] '-losqp' {ipopt} {fatrop}}}];
           """)
       else:
         out.write(f"""
@@ -3423,8 +3423,8 @@ plt.show()
         if CURRENT_CASADI_VERSION>=version.parse("3.6.3"):
           deps += ["-lipopt"]
 
-          if casadi.has_nlpsol("fatrop"): deps += ["-lfatrop"]
-          if casadi.has_nlpsol("blasfeo"): deps += ["-lblasfeo"]
+          if casadi.has_nlpsol("fatrop"):
+            deps += ["-lfatrop","-lblasfeo"]
           
         fatrop_driver = os.path.join(os.path.abspath(src_dir),"foobar","lib","libfatrop_driver.so")
         if os.path.exists(fatrop_driver):
