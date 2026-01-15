@@ -2665,7 +2665,7 @@ int {prefix}flag_value({prefix}struct* m, int index);
           }}
 
           const {prefix}stats* {prefix}get_stats(const {prefix}struct* m) {{
-            return {casadi_call("stats") if use_codegen else 0};
+            return (const {prefix}stats*) {casadi_call("stats") if use_codegen else 0};
           }}
 
         """)
