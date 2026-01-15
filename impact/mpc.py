@@ -1749,11 +1749,13 @@ CASADI_SYMBOL_EXPORT const casadi_int* F_sparsity_out(casadi_int i) {{
         #include <stdio.h>
         #include <stdlib.h>
         #include <assert.h>
-
+        
+        static int impact_print(const char *s) {{ return printf("%s", s); }}
+        
         int main() {{
           int i, j, n_row, n_col, flag;
           double *u_scratch, *x_scratch;
-          {prefix}struct* m = impact_initialize(printf, 0);
+          {prefix}struct* m = impact_initialize(impact_print, 0);
           if (!m) {{
             printf("Failed to initialize\\n");
             return 1;
