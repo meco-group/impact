@@ -103,21 +103,19 @@ Assumptions
 ================
 From this point onward, the commands and structure correspond to ROS 2 *Jazzy* in Ubuntu 24.04. But it can be adapted to other ROS 2 distros and OSes. Commands are definded respect to the cart pendulum example of this documentation, and can be adapted to other exported packages.
 
-*  ROS 2 Jazzy is installed via APT and available at ``/opt/ros/jazzy``.
-*  The workspace root is <workspace>.
-*  A Conda environment provides CasADi.
-*  The exported package directory ``ROS2_package/cart_pendros/`` (containing ``package.xml``) is already present.
+*  The workspace root is <workspace>. This is the path that contains the files of ``ROS2`` folder from examples folder in the Impact repository.
+.. *  The exported package directory ``ROS2_package/cart_pendros/`` (containing ``package.xml``) is already present.
   
 
-Workspace Layout
-================
+.. Workspace Layout
+.. ================
 
-Create a workspace and place the exported package in ``src``:
+.. Create a workspace and place the exported package in ``src``:
 
-.. code-block:: bash
+.. .. code-block:: bash
 
-   mkdir -p <workspace>/impact_ws/src
-   # Then place the exported folder (e.g. ROS2_package/cart_pendros) into <workspace>/impact_ws/src
+..    mkdir -p <workspace>/impact_ws/src
+..    # Then place the exported folder (e.g. ROS2_package/cart_pendros) into <workspace>/impact_ws/src
 
 
 
@@ -128,29 +126,62 @@ Create and activate a Conda environment:
 
 .. code-block:: bash
 
-  conda create -n ros_jazzy -c conda-forge -c robostack -c robostack-jazzy \
-    python=3.12 ros-jazzy-ros-base colcon-common-extensions cmake pkg-config casadi -y
-  conda activate ros_jazzy
+  conda create -n impact_ros -c conda-forge -c robostack -c robostack-jazzy python=3.12 ros-jazzy-ros-base colcon-common-extensions cmake pkg-config -y
+  conda activate impact_ros
 
+
+Install Impact and dependencies in the Conda env:
+
+.. code-block:: bash
+
+  # if you use impact from PyPI
+  pip install impact-meco  
+  # or if you use impact from local source code
+  cd <path-to-impact-source-code>
+  python -m pip install -e . 
+
+
+Exporting the Package
+====================
+Now we need to run the script that creates the OCP problem, solve it once, simulate MPC in closed-loop, and export the ROS 2 package.
+
+1. Navigate to the folder that contains the script ``CartPendulumDoc.py``.
+
+.. code-block:: bash
+
+  cd <workspace>
+
+2. Run the script to export the package:
+
+.. code-block:: bash
+
+  python3 CartPendulumDoc.py
+
+It will create the build dir ``cart_pendros_build_dir`` and the ``ROS2_package`` folder.
 
 Building the Package
 ====================
 
-1. Place the exported package (e.g. ROS2_package/cart_pendros) into ``<workspace>/impact_ws/src``.
-2. Verify that the file ``ROS2_package/cart_pendros/CMakeLists.txt`` points to CasADi in the Conda env:
+1. Creating the workspace folder structure 
 
-   .. code-block:: cmake
+.. code-block:: bash
 
-      set(CASADI_DIR "<conda-envs-path>/ros_jazzy/lib")
-      set(CASADI_INCLUDEDIR "<conda-envs-path>/ros_jazzy/include")
+  mkdir -p impact_ws/src
 
-3. Build only the exported package:
 
-   .. code-block:: bash
 
-      source /opt/ros/jazzy/setup.bash
-      cd <workspace>/impact_ws
-      colcon build --packages-select cart_pendros --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo
+2. copy the exported package into the workspace src: 
+
+.. code-block:: bash
+
+  cp -rf ROS2_package/cart_pendros impact_ws/src/
+
+3. Navigate to the workspace root and execute the build command:
+
+.. code-block:: bash
+
+  cd impact_ws
+  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo
 
 Expected result: ``Summary: 1 package finished``.
 
@@ -164,8 +195,7 @@ Controller node:
   .. code-block:: bash
 
     # Terminal A
-    conda activate ros_jazzy
-    source /opt/ros/jazzy/setup.bash
+    conda activate impact_ros
     source <workspace>/impact_ws/install/setup.bash
 
     ros2 run cart_pendros cart_pendros_controller --ros-args --log-level info
@@ -175,20 +205,20 @@ Model node:
   .. code-block:: bash
 
     # Terminal B
-    conda activate ros_jazzy
-    source /opt/ros/jazzy/setup.bash
+    conda activate impact_ros
     source <workspace>/impact_ws/install/setup.bash
+
     ros2 run cart_pendros cart_pendros_model --ros-args --log-level info
 
+Now both nodes are running and waiting for inputs via topics. There are two ways to test them: via command line topics or via a Python script that automates the process.
 
-Testing via Topics
-==================
+1. Testing via Topics
+------------------
 While the nodes are running, in another terminal (can be with or without Conda; sourcing ROS +
 overlay is required). To inspect nodes and topics:
 
   .. code-block:: bash
 
-    source /opt/ros/jazzy/setup.bash
     source <workspace>/impact_ws/install/setup.bash
     ros2 node list
     ros2 topic list -t | grep -i impact
@@ -210,7 +240,6 @@ Using three additional terminals we can listen topics of interest like ``control
 
   .. code-block:: bash
 
-    source /opt/ros/jazzy/setup.bash
     source <workspace>/impact_ws/install/setup.bash
 
 Read the topic ``control_to_apply``
@@ -269,19 +298,21 @@ Which are the states of the system in the next sampling time after applying the 
 
 
 
-Closed-Loop Test with Python
-============================
+2. Closed-Loop Test with Python
+-----------------------------
 
 The process of writing/reading topics can be automated.  
 The script ``mpc_closed_loop_sync.py`` executes a closed-loop simulation and logs results:
 
 .. code-block:: bash
 
-   cd <Folder that contains mpc_closed_loop_sync.py>
+   cd <workspace>
    python3 mpc_closed_loop_sync.py --x0 0.5 0.0 0.0 0.0 --steps 70 --csv mpc_log.csv
+   python3 plot_mpc_log.py
 
 With the command the initial state values are defined, the number of steps than in this case is 70,  with sampling time Ts=2/40=0.05 represents 70*0.05=3.5 s of simulation. Results are saved in the file ``mpc_log.csv``
-Then, with the file ``plot_mpc_log.py``  the csv is read it and then the results are plotted:
+Then, with the file ``plot_mpc_log.py``  the csv is read it and then the results are plotted
+
 
 .. image:: ../tutorial/imagesGetting/RosStates.png
         :width: 350 px

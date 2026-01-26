@@ -192,7 +192,7 @@ class ROS2Generator:
         self.values_dict['SOLVER_LIBRARY'] = SOLVER_LIBRARY 
 
 
-        cmakelists_code = """cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
+        cmakelists_code = """cmake_minimum_required(VERSION 3.10)
 project({PKG_NAME})
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
