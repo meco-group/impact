@@ -168,7 +168,7 @@ There are several ways to specify or modify expressions in Impact.
 
 * :code:`.at_t0` and :code:`.at_tf` methods are used to define the expression at the initial and final sample of the horizon, respectively. They can be used to define the cost function, and constraints. (Based Rockit API `.at_t0 <https://meco-software.pages.gitlab.kuleuven.be/rockit/apidoc/rockit.html#rockit.stage.Stage.at_t0>`_ , `.at_tf <https://meco-software.pages.gitlab.kuleuven.be/rockit/apidoc/rockit.html#rockit.stage.Stage.at_tf>`_)
 * :code:`.prev` and :code:`.next` methods are used to define the expression at the previous and next sample of the horizon, respectively (Based Rockit API `.prev <https://meco-software.pages.gitlab.kuleuven.be/rockit/apidoc/rockit.html#rockit.stage.Stage.prev>`_ , `.next <https://meco-software.pages.gitlab.kuleuven.be/rockit/apidoc/rockit.html#rockit.stage.Stage.next>`_). They can be used to define the cost function, and constraints. Specially useful for defining limits in the change of the control or states variables. 
-    :code:`ocp.next(u)-u` defines the difference between the next control and the current control.
+    :code:`mpc.next(u)-u` defines the difference between the next control and the current control.
 
 
 ************************
