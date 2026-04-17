@@ -245,21 +245,20 @@ Solver
 The solver is the most important part of the OCP. It is the tool that solves the optimization problem at each sample time. Impact allows to instantiate the solvers interfaced in Rockit and CasADi. 
 The solver is defined using the method :code:`.solver()`. Each solver has its own options and parameters. The following solvers are available:
 
-    * :code:`sqpmethod` standard definition of a SQP method. `sqpmethod <https://web.casadi.org/python-api/#sqpmethod>`_ For this method, an inner QP solver is required, it should be set in the option :code:`qpsol`. 
-        More common options are:
+    * :code:`sqpmethod` standard definition of a SQP method. `sqpmethod <https://web.casadi.org/python-api/#sqpmethod>`_ For this method, an inner QP solver is required, it should be set in the option :code:`qpsol`. More common options are:
 
-        * :code:`qrqp` `qrqp <https://web.casadi.org/python-api/#qrqp>`_ This method solves QP problems using an active-set method.
-        * :code:`osqp` `osqp_CasADi <https://web.casadi.org/python-api/#osqp>`_, `osqp <https://osqp.org/docs/>`_  This method solves convex quadratic programs (QP) problems using an operator splitting method. 
-        * :code:`qpoases` `qpoases <https://web.casadi.org/python-api/#qpoases>`_ is a solver using an active Set Strategy.
+      * :code:`qrqp` `qrqp <https://web.casadi.org/python-api/#qrqp>`_ This method solves QP problems using an active-set method.
+      * :code:`osqp` `osqp_CasADi <https://web.casadi.org/python-api/#osqp>`_, `osqp <https://osqp.org/docs/>`_  This method solves convex quadratic programs (QP) problems using an operator splitting method. 
+      * :code:`qpoases` `qpoases <https://web.casadi.org/python-api/#qpoases>`_ is a solver using an active Set Strategy.
 
-        For more options check the CasADi documentation of QP solvers `qp <https://web.casadi.org/python-api/#qp>`_.
+    For more options check the CasADi documentation of QP solvers `qp <https://web.casadi.org/python-api/#qp>`_. All this options can be codegenerate and produce sefl-contained C code.
   
-    * :code:`Ipopt` `Ipopt_CasADi <https://web.casadi.org/python-api/#ipopt>`_, `Ipopt <https://coin-or.github.io/Ipopt/>`_ is a well konwn open-source solver for solving large-scale nonlinear optimization problems. It is based on the primal-dual interior point method and uses a line search strategy to handle constraints. 
-    * :code:`Fatrop` `Fatrop <https://web.casadi.org/python-api/#fatrop>`_ is a fast and robust solver (Ipopt inspired) for nonlinear programming problems. It is fast by exploiting the optimal control problem structure through a specialized linear solver.
+    * :code:`Ipopt` `Ipopt_CasADi <https://web.casadi.org/python-api/#ipopt>`_, `Ipopt <https://coin-or.github.io/Ipopt/>`_ is a well konwn open-source solver for solving large-scale nonlinear optimization problems. It is based on the primal-dual interior point method and uses a line search strategy to handle constraints. It can not be codegenerated natively because dependencies.
+    * :code:`Fatrop` `Fatrop <https://web.casadi.org/python-api/#fatrop>`_ is a fast and robust solver (Ipopt inspired) for nonlinear programming problems. It is fast by exploiting the optimal control problem structure through a specialized linear solver. It can be codegenerated, for hardware deployment needs the user precompile the library.
 
 
 :code:`Acados` `Acados <https://docs.acados.org/>`_ is a toolbox for optimal control and nonlinear MPC, it offers QP, and NLP solvers tailored for real-time applications. It interfaces different solvers like HPIPM, qpOASES, DAQP and OSQP.
-Acados can be used in Impact, it is invoked using the function :code:`external_method()` in the :code:`.method()` definition of the problem. It defines transcription and solver, all acados parameters and solvers are configured there (An illustrative example of this solver is provided in the examples folder).
+Acados can be used in Impact, it is invoked using the function :code:`external_method()` in the :code:`.method()` definition of the problem. It defines transcription and solver, all acados parameters and solvers are configured there (An illustrative example of this solver is provided in the examples folder). It can be codegenerated, for hardware deployment needs the user precompile the library.
 
 ----------------------
 Initial guess
@@ -272,7 +271,7 @@ The initial guess is used to initialize the optimization algorithm, and it can b
 
 
 Once the problem is defined, it can be solved using the method :code:`.solve()`. 
-Also, the problem can be exported directly to generate the Impact artifacts.
+Also, the problem can be exported directly to generate the Impact artifacts without setting an initial guess.
 
 
 
@@ -323,21 +322,33 @@ The method :code:`.export()` make the exportation and create a folder with the n
 The exportation options are:
 
   *  :code:`name` is the name of the exportation. It is used to create the folder where the artifacts are stored.
+  
   *  :code:`src_dir` is the source directory where the artifacts are stored. The default value is `.` which is the current working directory.
+  
   *  :code:`compile` is a boolean value that indicates whether to compile the artifacts or not. The default value is `True`.
-  *  :code:`use_codegen` is a boolean value that indicates whether to use code generation or not. The default value is `True`. If it is set to `False`, the artifacts are generated without code generation. 
+  
+  * :code:`use_codegen` controls whether code generation is used to produce a self-contained C solver. Accepted values are:
+    
+    * :code:`None` (default): code generation is attempted first, if it fails (e.g. the solver does not support it), the export silently falls back to a serialized :code:`.casadi` file loaded at runtime.
+    * :code:`True`: code generation is forced, an exception is raised if it is not supported by the chosen solver.
+    * :code:`False`: code generation is skipped entirely, the export always produces the serialized :code:`.casadi` fallback path. 
+  
   *  :code:`short_output` is a boolean value, with default value `True`.
   
-    * :code:`True` the output is short. The outputs are states at next sampling time (k=1), and the controls at the current sampling time (k=0).
-    * :code:`False` the output is long. The outputs are states and controls for the whole horizon.
+     * :code:`True` the output is short. The outputs are states at next sampling time (k=1), and the controls at the current sampling time (k=0).
+     * :code:`False` the output is long. The outputs are states and controls for the whole horizon.
   
   *  :code:`ignore_errors` is a boolean value that indicates whether to ignore errors or not while solving the optimization problem in simulation. The default value is `False`. 
+  
   *  :code:`qp_error_on_fail` is a boolean value that indicates whether to raise an error if the QP solver fails or not in case using a solver that involve QP solutions. The default value is `True`. 
+  
   *  :code:`context` allow to specify the environment :code:`"matlab"`, default value is :code:`None`.  
+  
   *  :code:`ros2` is a boolean value that indicates whether to export the ROS2 node or not. The default value is `False`.
+
   *  :code:`ros2_options` is a ditionary with the options for the ROS2 node. The options are:
   
-    * :code:`'repeat_on_fail'` is a string that indicates whether to repeat the excecution on failure or not. 
+  * :code:`repeat_on_fail` is a string that indicates whether to repeat the excecution on failure or not. 
   
   *   :code:`mode` defines how the generated C code is compiled. Options are:
   

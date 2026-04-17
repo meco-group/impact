@@ -1,3 +1,8 @@
+"""Franka MPC example for Sphinx-Gallery.
+
+This script demonstrates MPC setup for the Franka Panda arm.
+"""
+
 import matplotlib.pyplot as plt
 import numpy as np
 
