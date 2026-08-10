@@ -19,6 +19,8 @@
 
 ## Description
 
+![Impact Logo](logo.png)
+
 
 [//]: # "Impact is a flexible toolchain for nonlinear model predictive control (NMPC) specification with automatic code generation capabilities. " 
 Impact is a flexible toolchain for the specification, prototyping, and deployment of optimal control problems (OCP) and model predictive control (MPC) strategies, with automatic generation of deployable artifacts.
